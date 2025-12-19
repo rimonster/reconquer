@@ -26,14 +26,16 @@
             "Mickey Mouse Clubhouse",
             "Doc McStuffins",
             "Sofia the First",
-            "The Wiggles"
+            "The Wiggles",
+            "Alan Menken"
         ],
         "artistIds": [
             "567T3B8p9mXfkp6rM2p6ul",
             "66S99uT6Y9UasI6pbpNczp",
             "2pU6x4X3qKWhX2ZpZbY5zT",
             "4A96T6yYI6Z9UasI6pbpNc",
-            "3fMbdpB1phvM7mNs7vM8vI"
+            "3fMbdpB1phvM7mNs7vM8vI",
+            "4U8RsdE9iHS0vF73G0OP4o"
         ],
         "genres": [
             "children's music",
@@ -83,12 +85,20 @@
             "The Backyardigans",
             "The Wiggles",
             "Jake and the Neverland Pirates",
-            "The Lion Guard"
+            "The Lion Guard",
+            "Idina Menzel",
+            "Kristen Bell",
+            "Alan Menken",
+            "Will Smith"
         ],
         "artistIds": [
             "4Uc8S9SyZ9U6S9uI",
             "69u69u69u69u",
-            "06HL4zGoIjrS52jakO0S4Y"
+            "06HL4zGoIjrS52jakO0S4Y",
+            "3Zh5kpM8VXfAEgJoExOAWa",
+            "3s9pM8pbJIDyGqvZ3z9OZT",
+            "4U8RsdE9iHS0vF73G0OP4o",
+            "5K4W6rqBFWDnAN6FQUkS6x"
         ],
         "genres": [
             "disney",
@@ -140,7 +150,13 @@
             "Zendaya",
             "Bella Thorne",
             "Pokémon",
-            "Minecraft"
+            "Minecraft",
+            "Idina Menzel",
+            "AURORA",
+            "Kristen Bell",
+            "Panic! At The Disco",
+            "Alan Menken",
+            "Will Smith"
         ],
         "artistIds": [
             "06HL4z0CvFAxyc27GXpf02",
@@ -157,7 +173,13 @@
             "66CXWjxzNUsdJxJ2JdwvnR",
             "7n2wHs1TKAczGzO7Dd2rGr",
             "0C8ZW7ezQVs4URX5aX7Kqx",
-            "06HL4zGoIjrS52jakO0S4Y"
+            "06HL4zGoIjrS52jakO0S4Y",
+            "3Zh5kpM8VXfAEgJoExOAWa",
+            "1WgXqy2Dd70QQOU7Ay074N",
+            "3s9pM8pbJIDyGqvZ3z9OZT",
+            "20JZFwl6HVl6yg8a4H3ZqK",
+            "4U8RsdE9iHS0vF73G0OP4o",
+            "5K4W6rqBFWDnAN6FQUkS6x"
         ],
         "genres": [
             "teen pop",
@@ -214,7 +236,22 @@
             "Jxdn",
             "Gayle",
             "Clinton Kane",
-            "JVKE"
+            "JVKE",
+            "Ariana Grande",
+            "Justin Bieber",
+            "Imagine Dragons",
+            "Camila Cabello",
+            "The Kid LAROI",
+            "Zedd",
+            "Alessia Cara",
+            "James Arthur",
+            "Timmy Trumpet",
+            "Infected Mushroom",
+            "AURORA",
+            "Panic! At The Disco",
+            "Will Smith",
+            "Daddy Yankee",
+            "Avril Lavigne"
         ],
         "artistIds": [
             "6qqNVTkY8uBg9cP3Jd7DAH",
@@ -246,8 +283,23 @@
             "6HvZYsbFfjnjFrWF950C9d",
             "3Nrfpe0tUJi4K4DXYWgMUX",
             "41MozSoPIsD1dJM0CLPjZF",
-            "2dIgFjalVxs4ThymZ67YCE",
-            "7n2Ycct7Beij7Dj7meI4X0"
+            "2IgFjalVxs4ThymZ67YCE",
+            "7n2Ycct7Beij7Dj7meI4X0",
+            "66CXWjxzNUsdJxJ2JdwvnR",
+            "1uNFoZAHBGtllmzznpCI3s",
+            "53XhwfbYqKCa1cC15pYq2q",
+            "4nDoRrQiYLoBzwC5BhVJzF",
+            "2tIP7SsRs7vjIcLrUe5p47",
+            "2qxJFvFYMEDqd7ui6kSAcq",
+            "3XEDxV2i5CcGJbmZX79QYf",
+            "4IWBUUAFIplrNtaOHcJPRM",
+            "3M4ThdJRZIWKpzxeRsyQNK",
+            "2vWTm2KXcRazS5K3K3G4hW",
+            "1WgXqy2Dd70QQOU7Ay074N",
+            "20JZFwl6HVl6yg8a4H3ZqK",
+            "5K4W6rqBFWDnAN6FQUkS6x",
+            "4VMYDCV2IEDYJArk749S6m",
+            "0p4nmQO2msCgU4IF37Wi3j"
         ],
         "genres": [
             "teen pop",

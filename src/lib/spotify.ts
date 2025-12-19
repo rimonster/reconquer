@@ -132,6 +132,61 @@ export const detectPollution = (track: SpotifyTrack, artistGenres: string[], min
     return null;
 };
 
+// Helper function to handle API errors with retries
+const fetchWithRetry = async (url: string, options: any, retries = 3): Promise<Response> => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+
+            if (response.status === 429) {
+                // Rate limited - wait and retry
+                const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
+                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                continue;
+            }
+
+            if (response.status === 401) {
+                throw new Error('AUTHENTICATION_EXPIRED');
+            }
+
+            if (!response.ok && response.status >= 500) {
+                // Server error - retry
+                if (i < retries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                    continue;
+                }
+            }
+
+            return response;
+        } catch (error: any) {
+            if (error.message === 'AUTHENTICATION_EXPIRED') throw error;
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        }
+    }
+    throw new Error('Max retries reached');
+};
+
+export const fetchAllLikedSongs = async (accessToken: string): Promise<any[]> => {
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const favoritesRaw: any[] = [];
+    let likedUrl: string | null = 'https://api.spotify.com/v1/me/tracks?limit=50';
+
+    while (likedUrl) {
+        const likedRes = await fetchWithRetry(likedUrl, { headers });
+        const likedData = await likedRes.json();
+        favoritesRaw.push(...(likedData.items || []).map((item: any) => ({
+            id: item.track.id,
+            name: item.track.name,
+            artist: item.track.artists.map((a: any) => a.name).join(', '),
+            album: item.track.album.name,
+            added_at: item.added_at
+        })));
+        likedUrl = likedData.next;
+    }
+    return favoritesRaw;
+};
+
 export const performFullScan = async (
     accessToken: string,
     minAge: number,
@@ -146,41 +201,6 @@ export const performFullScan = async (
         const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
         const userData = await userRes.json();
         const userId = userData.id;
-
-        // Helper function to handle API errors with retries
-        const fetchWithRetry = async (url: string, options: any, retries = 3): Promise<Response> => {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-
-                    if (response.status === 429) {
-                        // Rate limited - wait and retry
-                        const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
-                        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                        continue;
-                    }
-
-                    if (response.status === 401) {
-                        throw new Error('AUTHENTICATION_EXPIRED');
-                    }
-
-                    if (!response.ok && response.status >= 500) {
-                        // Server error - retry
-                        if (i < retries - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-                            continue;
-                        }
-                    }
-
-                    return response;
-                } catch (error: any) {
-                    if (error.message === 'AUTHENTICATION_EXPIRED') throw error;
-                    if (i === retries - 1) throw error;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-                }
-            }
-            throw new Error('Max retries reached');
-        };
 
         // Fetch ALL liked songs with pagination
         onProgress?.('Scanning your favorite songs...', 5);

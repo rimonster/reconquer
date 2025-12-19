@@ -28,6 +28,7 @@ const App: React.FC = () => {
     favorites: true,
     history: true
   });
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -111,6 +112,29 @@ const App: React.FC = () => {
     const { getAuthUrl } = await import('./lib/spotify');
     const authUrl = await getAuthUrl();
     window.location.href = authUrl;
+  };
+
+  const handleDownloadLikes = async () => {
+    if (!accessToken) return;
+    setIsDownloading(true);
+    try {
+      const { fetchAllLikedSongs } = await import('./lib/spotify');
+      const likes = await fetchAllLikedSongs(accessToken);
+      const blob = new Blob([JSON.stringify(likes, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `spotify_likes_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Failed to download likes.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   // Grouped tracks for review screen
@@ -220,9 +244,22 @@ const App: React.FC = () => {
                 <div className="glass" style={{ padding: '2rem', opacity: 0.5 }}>
                   <Youtube size={40} color="#666" style={{ margin: '0 auto 1rem' }} />
                   <h3>YouTube</h3>
-                  <button disabled style={{ marginTop: '1rem', width: '100%', background: '#333', color: '#666', padding: '0.8rem', borderRadius: '100px' }}>Coming Soon</button>
+                  <button disabled style={{ marginTop: '1rem', width: '100', background: '#333', color: '#666', padding: '0.8rem', borderRadius: '100px' }}>Coming Soon</button>
                 </div>
               </div>
+
+              {accessToken && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <button
+                    onClick={handleDownloadLikes}
+                    disabled={isDownloading}
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'gray', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+                  >
+                    {isDownloading ? 'Downloading...' : 'Debug: Download All Likes (JSON)'}
+                  </button>
+                </div>
+              )}
+
               <button disabled={!accessToken} onClick={() => setStep('scan')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: accessToken ? 'white' : '#333', color: accessToken ? 'black' : 'gray' }}>Run Scan</button>
             </motion.div>
           )}
