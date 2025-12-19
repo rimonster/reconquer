@@ -184,7 +184,7 @@ export const performFullScan = async (
     accessToken: string,
     minAge: number,
     maxAge: number,
-    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean, history: boolean },
+    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean },
     onProgress?: (stage: string, percent: number) => void
 ): Promise<{ polluted: PollutedItem[], scannedCount: number }> => {
     try {
@@ -195,43 +195,23 @@ export const performFullScan = async (
         const userData = await userRes.json();
         const userId = userData.id;
 
-        // Fetch ALL liked songs with pagination
-        onProgress?.('Scanning your favorite songs...', 5);
-        const favoritesRaw: any[] = [];
-        let likedUrl: string | null = 'https://api.spotify.com/v1/me/tracks?limit=50';
-        while (likedUrl) {
-            const likedRes = await fetchWithRetry(likedUrl, { headers });
-            const likedData = await likedRes.json();
-            favoritesRaw.push(...(likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' })));
-            likedUrl = likedData.next;
-        }
-        onProgress?.('Favorite songs scanned', 15);
+        // NOTE: We do NOT scan History/Top Picks because they are READ-ONLY in Spotify's API
+        // They cannot be deleted, only viewed. Including them would show tracks that can't be removed.
+        // Users should unlike songs and remove from playlists to affect the algorithm.
 
-        const fetchPromises: Promise<any>[] = [];
-        if (removalSettings.history) {
-            onProgress?.('Scanning listening history...', 20);
-            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/player/recently-played?limit=50', { headers }).then(r => r.json()));
-            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=short_term', { headers }).then(r => r.json()));
-            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=medium_term', { headers }).then(r => r.json()));
-            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=long_term', { headers }).then(r => r.json()));
-        }
-
-        const results = await Promise.all(fetchPromises);
-        onProgress?.('Listening history scanned', 30);
         let allTracksRaw: any[] = [];
 
-        // Only include favorites in the pollution list if removal is checked
+        // Only fetch and include favorites if the checkbox is checked
         if (removalSettings.favorites) {
-            allTracksRaw.push(...favoritesRaw);
-        }
-
-        let index = 0;
-        if (removalSettings.history) {
-            const recent = (results[index++]?.items || []).map((item: any) => ({ ...item.track, _source: 'History' }));
-            const topS = (results[index++]?.items || []).map((t: any) => ({ ...t, _source: 'Top Picks' }));
-            const topM = (results[index++]?.items || []).map((t: any) => ({ ...t, _source: 'Top Picks' }));
-            const topL = (results[index++]?.items || []).map((t: any) => ({ ...t, _source: 'Top Picks' }));
-            allTracksRaw.push(...recent, ...topS, ...topM, ...topL);
+            onProgress?.('Scanning your favorite songs...', 5);
+            let likedUrl: string | null = 'https://api.spotify.com/v1/me/tracks?limit=50';
+            while (likedUrl) {
+                const likedRes = await fetchWithRetry(likedUrl, { headers });
+                const likedData = await likedRes.json();
+                allTracksRaw.push(...(likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' })));
+                likedUrl = likedData.next;
+            }
+            onProgress?.('Favorite songs scanned', 15);
         }
 
         let scannedPlaylists: any[] = [];
@@ -339,7 +319,7 @@ export const performFullScan = async (
 export const performQuarantine = async (
     accessToken: string,
     pollutedItems: PollutedItem[],
-    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean, history: boolean },
+    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean },
     onProgress?: (stage: string, percent: number) => void
 ): Promise<string> => {
     const headers = {

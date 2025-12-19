@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Music, Zap, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube, Loader2, ExternalLink, ChevronDown, ChevronUp, User, Users } from 'lucide-react';
+import { Music, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube, Loader2, ExternalLink, ChevronDown, ChevronUp, User, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PollutedItem } from './lib/spotify';
 import type { PollutedVideo } from './lib/youtube';
@@ -8,8 +8,8 @@ type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'rev
 
 const App: React.FC = () => {
   const [step, setStep] = useState<Step>('intro');
-  const [minAge, setMinAge] = useState<number>(0);
-  const [maxAge, setMaxAge] = useState<number>(20);
+  const [minAge, setMinAge] = useState<number>(() => Number(localStorage.getItem('minAge')) || 0);
+  const [maxAge, setMaxAge] = useState<number>(() => Number(localStorage.getItem('maxAge')) || 20);
   const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
   const [scannedCount, setScannedCount] = useState<number>(0);
   const [quarantinePlaylistId, setQuarantinePlaylistId] = useState<string | null>(null);
@@ -22,11 +22,13 @@ const App: React.FC = () => {
   const [expandedArtists, setExpandedArtists] = useState<Set<string>>(new Set());
 
   // Removal Options
-  const [removalSettings, setRemovalSettings] = useState({
-    createdPlaylists: true,
-    collaborativePlaylists: true,
-    favorites: true,
-    history: true
+  const [removalSettings, setRemovalSettings] = useState(() => {
+    const saved = localStorage.getItem('removal_settings');
+    return saved ? JSON.parse(saved) : {
+      createdPlaylists: true,
+      collaborativePlaylists: true,
+      favorites: true
+    };
   });
 
   useEffect(() => {
@@ -40,7 +42,7 @@ const App: React.FC = () => {
           if (token) {
             setAccessToken(token);
             localStorage.setItem('spotify_access_token', token);
-            setStep('scan');
+            setStep('setup');
             window.history.replaceState({}, document.title, window.location.pathname.replace('/callback', ''));
           }
         } catch (err) {
@@ -66,6 +68,13 @@ const App: React.FC = () => {
       checkAuth();
     }
   }, [accessToken]);
+
+  // Persist settings
+  useEffect(() => {
+    localStorage.setItem('minAge', minAge.toString());
+    localStorage.setItem('maxAge', maxAge.toString());
+    localStorage.setItem('removal_settings', JSON.stringify(removalSettings));
+  }, [minAge, maxAge, removalSettings]);
 
   const totalPollutedItems = pollutedTracks.length + pollutedVideos.length;
 
@@ -196,7 +205,7 @@ const App: React.FC = () => {
     <div className="container animate-fade-in">
       <header style={{ textAlign: 'center', marginBottom: '2.5rem', marginTop: '1.5rem' }}>
         <div style={{ position: 'relative', width: '120px', height: '120px', margin: '0 auto 1rem' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(29, 185, 84, 0.4) 0%, transparent 70%)', filter: 'blur(15px)', zEntries: -1 }}></div>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(29, 185, 84, 0.4) 0%, transparent 70%)', filter: 'blur(15px)', zIndex: -1 }}></div>
           <img src="logo.png" alt="unKidMyFeed Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))' }} />
         </div>
         <h1 style={{ fontSize: '3rem', background: 'linear-gradient(to bottom, #FFFFFF 0%, #1DB954 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.06em', fontWeight: '900', textShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>unKidMyFeed</h1>
@@ -282,13 +291,12 @@ const App: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '2rem' }}>
-                <label style={{ display: 'block', marginBottom: '1rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Cleanup Strategy:</label>
+                <label style={{ display: 'block', marginBottom: '1rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>What to Clean:</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                   {[
                     { key: 'favorites', label: 'Un-like Songs (Favorites)', icon: <Music size={18} /> },
                     { key: 'createdPlaylists', label: 'My Created Playlists', icon: <User size={18} /> },
-                    { key: 'collaborativePlaylists', label: 'My Collaborative Playlists', icon: <Users size={18} /> },
-                    { key: 'history', label: 'Isolate History & Top Picks', icon: <Zap size={18} /> }
+                    { key: 'collaborativePlaylists', label: 'My Collaborative Playlists', icon: <Users size={18} /> }
                   ].map(s => (
                     <div key={s.key} onClick={() => setRemovalSettings({ ...removalSettings, [s.key]: !(removalSettings as any)[s.key] })} style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', padding: '0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
                       {(removalSettings as any)[s.key] ? <CheckSquare size={20} color="#1DB954" /> : <Square size={20} color="gray" />}
@@ -296,11 +304,9 @@ const App: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                {removalSettings.history && (
-                  <p style={{ marginTop: '0.8rem', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
-                    Note: "Top Picks" and "History" are read-only signals in Spotify. We will move these items to your Quarantine playlist, but they won't disappear from Spotify's internal lists until your listening habits change.
-                  </p>
-                )}
+                <p style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', lineHeight: '1.5', padding: '0.8rem', background: 'rgba(29, 185, 84, 0.05)', borderRadius: '8px', borderLeft: '3px solid #1DB954' }}>
+                  <strong style={{ color: '#1DB954' }}>Note:</strong> History and Top Picks cannot be deleted via Spotify's API. Removing tracks from your Favorites and Playlists will naturally update your algorithm over time.
+                </p>
               </div>
               <button onClick={() => setStep('connect')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold' }}>Continue to Connect</button>
             </motion.div>
@@ -351,46 +357,72 @@ const App: React.FC = () => {
           {step === 'result' && (
             <motion.div key="result">
               <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                <h3 style={{ color: '#FF0000', fontSize: '1.5rem' }}>{totalPollutedItems} Polluted Items Found</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>Analyzed {scannedCount} items from your profile</p>
+                <h3 style={{ color: totalPollutedItems === 0 ? '#1DB954' : '#FF0000', fontSize: '1.5rem' }}>
+                  {totalPollutedItems === 0 ? '🎉 Clean Profile!' : `${totalPollutedItems} Polluted Items Found`}
+                </h3>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  {totalPollutedItems === 0
+                    ? `Your profile is clean! No youth content detected in ${scannedCount} analyzed items.`
+                    : `Analyzed ${scannedCount} items from your profile`
+                  }
+                </p>
               </div>
 
-              <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                {tracksBySource.map(([source, tracks]) => (
-                  <div key={source} style={{ marginBottom: '2rem' }}>
-                    <h4 style={{
-                      fontSize: '0.9rem',
-                      color: '#1DB954',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      marginBottom: '1rem',
-                      borderBottom: '1px solid rgba(255,255,255,0.1)',
-                      paddingBottom: '0.5rem',
-                      display: 'flex',
-                      justifyContent: 'space-between'
-                    }}>
-                      <span>{source}</span>
-                      <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>{tracks.length} items</span>
-                    </h4>
-                    {tracks.slice(0, 30).map((t, i) => (
-                      <div key={i} className="polluted-item" style={{ background: 'none', border: 'none', padding: '0.4rem 0' }}>
-                        <img src={t.album.images[0]?.url} alt="" style={{ width: 32, height: 32, borderRadius: 4 }} />
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{t.name}</p>
-                          <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{t.reason}</p>
-                        </div>
+              {totalPollutedItems > 0 ? (
+                <>
+                  <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                    {tracksBySource.map(([source, tracks]) => (
+                      <div key={source} style={{ marginBottom: '2rem' }}>
+                        <h4 style={{
+                          fontSize: '0.9rem',
+                          color: '#1DB954',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          marginBottom: '1rem',
+                          borderBottom: '1px solid rgba(255,255,255,0.1)',
+                          paddingBottom: '0.5rem',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span>{source}</span>
+                          <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>{tracks.length} items</span>
+                        </h4>
+                        {tracks.slice(0, 30).map((t, i) => (
+                          <div key={i} className="polluted-item" style={{ background: 'none', border: 'none', padding: '0.4rem 0' }}>
+                            <img src={t.album.images[0]?.url} alt="" style={{ width: 32, height: 32, borderRadius: 4 }} />
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{t.name}</p>
+                              <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{t.reason}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {tracks.length > 30 && (
+                          <p style={{ fontSize: '0.7rem', color: 'gray', textAlign: 'center', marginTop: '0.5rem' }}>+ {tracks.length - 30} more in this section</p>
+                        )}
                       </div>
                     ))}
-                    {tracks.length > 30 && (
-                      <p style={{ fontSize: '0.7rem', color: 'gray', textAlign: 'center', marginTop: '0.5rem' }}>+ {tracks.length - 30} more in this section</p>
-                    )}
                   </div>
-                ))}
-              </div>
 
-              <button onClick={() => setStep('payment')} style={{ width: '100%', padding: '1.2rem', marginTop: '2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>
-                Purge for $5
-              </button>
+                  <button onClick={() => setStep('payment')} style={{ width: '100%', padding: '1.2rem', marginTop: '2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>
+                    Purge for $5
+                  </button>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '3rem', background: 'rgba(29, 185, 84, 0.05)', borderRadius: '12px', border: '1px solid rgba(29, 185, 84, 0.2)' }}>
+                  <ShieldCheck size={80} color="#1DB954" style={{ margin: '0 auto 2rem' }} />
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: '1.6' }}>
+                    Your {removalSettings.favorites && removalSettings.createdPlaylists && removalSettings.collaborativePlaylists
+                      ? 'favorites and playlists are'
+                      : removalSettings.favorites
+                        ? 'favorites are'
+                        : 'playlists are'} free from detected youth content for ages {minAge}–{maxAge}.
+                    Keep enjoying your music!
+                  </p>
+                  <button onClick={() => setStep('setup')} style={{ padding: '1rem 2rem', borderRadius: '100px', background: 'rgba(29, 185, 84, 0.1)', color: '#1DB954', border: '1px solid #1DB954', fontWeight: 'bold', cursor: 'pointer' }}>
+                    Run Another Scan
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
 
