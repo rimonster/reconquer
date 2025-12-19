@@ -12,8 +12,6 @@ const App: React.FC = () => {
   const [maxAge, setMaxAge] = useState<number>(10);
   const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
   const [scannedCount, setScannedCount] = useState<number>(0);
-  const [auditedFavorites, setAuditedFavorites] = useState<any[]>([]);
-  const [showAudit, setShowAudit] = useState(false);
   const [quarantinePlaylistId, setQuarantinePlaylistId] = useState<string | null>(null);
 
   // Removal Options
@@ -71,11 +69,10 @@ const App: React.FC = () => {
 
         try {
           const { performFullScan } = await import('./lib/spotify');
-          const { polluted, scannedCount: totalScanned, favoritesAudit } = await performFullScan(accessToken, minAge, maxAge, removalSettings);
+          const { polluted, scannedCount: totalScanned } = await performFullScan(accessToken, minAge, maxAge, removalSettings);
 
           setPollutedTracks(polluted);
           setScannedCount(totalScanned);
-          setAuditedFavorites(favoritesAudit || []);
           setPollutedVideos([]);
           setStep('result');
         } catch (err) {
@@ -305,46 +302,17 @@ const App: React.FC = () => {
                 <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>We identified {totalPollutedItems} items that are masking your true taste.</p>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <button
-                  onClick={() => setShowAudit(false)}
-                  style={{ padding: '0.5rem 0', fontSize: '0.8rem', color: !showAudit ? '#1DB954' : 'gray', background: 'none', border: 'none', borderBottom: !showAudit ? '2px solid #1DB954' : 'none', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  POLLUTED ITEMS
-                </button>
-                <button
-                  onClick={() => setShowAudit(true)}
-                  style={{ padding: '0.5rem 0', fontSize: '0.8rem', color: showAudit ? '#1DB954' : 'gray', background: 'none', border: 'none', borderBottom: showAudit ? '2px solid #1DB954' : 'none', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  FAVORITES AUDIT
-                </button>
-              </div>
-
               <div style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '2rem', paddingRight: '0.5rem' }}>
-                {!showAudit ? (
-                  pollutedTracks.map((item, i) => (
-                    <div key={i} className="polluted-item">
-                      <img src={item.album?.images[0]?.url} alt="art" />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
-                        <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{item.reason} — <span style={{ color: '#1DB954' }}>{item.source}</span></p>
-                      </div>
-                      <Trash2 size={16} color="#FF0000" />
+                {pollutedTracks.map((item, i) => (
+                  <div key={i} className="polluted-item">
+                    <img src={item.album?.images[0]?.url} alt="art" />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
+                      <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{item.reason} — <span style={{ color: '#1DB954' }}>{item.source}</span></p>
                     </div>
-                  ))
-                ) : (
-                  auditedFavorites.map((item, i) => (
-                    <div key={i} className="polluted-item" style={{ borderColor: item._isPolluted ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255,255,255,0.05)' }}>
-                      <img src={item.album?.images[0]?.url} alt="art" />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.artists.map((a: any) => a.name).join(', ')}</p>
-                        {item._isPolluted && <p style={{ fontSize: '0.6rem', color: '#FF0000', marginTop: '2px' }}>Flagged: {item._reason}</p>}
-                      </div>
-                      {item._isPolluted ? <Trash2 size={16} color="#FF0000" /> : <ShieldCheck size={16} color="#1DB954" />}
-                    </div>
-                  ))
-                )}
+                    <Trash2 size={16} color="#FF0000" />
+                  </div>
+                ))}
               </div>
 
               <button onClick={nextStep} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>

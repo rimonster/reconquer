@@ -137,14 +137,13 @@ export const performFullScan = async (
     minAge: number,
     maxAge: number,
     removalSettings: { favorites: boolean, playlists: boolean, history: boolean }
-): Promise<{ polluted: PollutedItem[], scannedCount: number, favoritesAudit: any[] }> => {
+): Promise<{ polluted: PollutedItem[], scannedCount: number }> => {
     try {
         const headers = { Authorization: `Bearer ${accessToken}` };
 
-        // Fetch favorites for audit
         const likedRes = await fetch('https://api.spotify.com/v1/me/tracks?limit=50', { headers });
         const likedData = await likedRes.json();
-        const favoritesAuditRaw = (likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' }));
+        const favoritesRaw = (likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' }));
 
         const fetchPromises: Promise<any>[] = [];
         if (removalSettings.history) {
@@ -163,7 +162,7 @@ export const performFullScan = async (
 
         // Only include favorites in the pollution list if removal is checked
         if (removalSettings.favorites) {
-            allTracksRaw.push(...favoritesAuditRaw);
+            allTracksRaw.push(...favoritesRaw);
         }
 
         let index = 0;
@@ -203,10 +202,8 @@ export const performFullScan = async (
 
         const scannedCount = uniqueTracks.length;
 
-        // Batch Genres for ALL tracks (including audit favorites just in case)
         const allScannedArtistIds = Array.from(new Set([
-            ...uniqueTracks.flatMap(t => t.artists.map((a: { id: string }) => a.id)),
-            ...favoritesAuditRaw.flatMap((t: any) => t.artists.map((a: { id: string }) => a.id))
+            ...uniqueTracks.flatMap(t => t.artists.map((a: { id: string }) => a.id))
         ]));
 
         const artistGenresMap: Record<string, string[]> = {};
@@ -228,14 +225,7 @@ export const performFullScan = async (
             }
         }
 
-        // Audit view
-        const favoritesAudit = favoritesAuditRaw.map((track: any) => {
-            const trackGenres = track.artists.flatMap((a: { id: string }) => artistGenresMap[a.id] || []);
-            const reason = detectPollution(track, trackGenres, minAge, maxAge);
-            return { ...track, _isPolluted: !!reason, _reason: reason };
-        });
-
-        return { polluted, scannedCount, favoritesAudit };
+        return { polluted, scannedCount };
     } catch (error) {
         console.error('Scan failed:', error);
         throw error;
