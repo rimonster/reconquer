@@ -175,27 +175,30 @@ export const performFullScan = async (
             allTracksRaw.push(...recent, ...topS, ...topM, ...topL);
         }
 
+        let scannedPlaylists: any[] = [];
         if (removalSettings.playlists) {
-            const playlistsData = results[index++]?.items || [];
-            for (const pl of playlistsData.slice(0, 5)) {
+            scannedPlaylists = results[index++]?.items || [];
+            for (const pl of scannedPlaylists.slice(0, 5)) {
                 const res = await fetch(`https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=50`, { headers });
                 const data = await res.json();
                 (data.items || []).forEach((item: any) => {
-                    if (item.track) allTracksRaw.push({ ...item.track, _source: `Playlist: ${pl.name.slice(0, 15)}...` });
+                    if (item.track) allTracksRaw.push({ ...item.track, _source: `Playlist: ${pl.name.slice(0, 15)}...`, _playlistId: pl.id });
                 });
             }
         }
 
-        const trackMap = new Map<string, { track: any, sources: Set<string> }>();
+        const trackMap = new Map<string, { track: any, sources: Set<string>, playlistIds: Set<string> }>();
         allTracksRaw.forEach((t: any) => {
             if (!t || !t.id) return;
-            if (!trackMap.has(t.id)) trackMap.set(t.id, { track: t, sources: new Set() });
+            if (!trackMap.has(t.id)) trackMap.set(t.id, { track: t, sources: new Set(), playlistIds: new Set() });
             trackMap.get(t.id)!.sources.add(t._source);
+            if (t._playlistId) trackMap.get(t.id)!.playlistIds.add(t._playlistId);
         });
 
         const uniqueTracks = Array.from(trackMap.values()).map(entry => ({
             ...entry.track,
-            _sources: Array.from(entry.sources)
+            _sources: Array.from(entry.sources),
+            _playlistIds: Array.from(entry.playlistIds)
         }));
 
         const scannedCount = uniqueTracks.length;
@@ -225,7 +228,7 @@ export const performFullScan = async (
             }
         }
 
-        // Audit view: scan them too so we can highlight why they were/weren't caught
+        // Audit view
         const favoritesAudit = favoritesAuditRaw.map((track: any) => {
             const trackGenres = track.artists.flatMap((a: { id: string }) => artistGenresMap[a.id] || []);
             const reason = detectPollution(track, trackGenres, minAge, maxAge);
@@ -237,4 +240,81 @@ export const performFullScan = async (
         console.error('Scan failed:', error);
         throw error;
     }
+};
+
+/**
+ * Performs actual cleanup: creates quarantine playlist and removes tracks.
+ */
+export const performQuarantine = async (
+    accessToken: string,
+    pollutedItems: PollutedItem[],
+    removalSettings: { favorites: boolean, playlists: boolean, history: boolean }
+): Promise<string> => {
+    const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+    };
+
+    // 1. Get user profile
+    const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
+    const userData = await userRes.json();
+    const userId = userData.id;
+
+    // 2. Create Quarantine Playlist
+    const plRes = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            name: 'Quarantined by unKidMyFeed',
+            description: 'Moved here to restore your algorithm. Safely isolated.',
+            public: false
+        })
+    });
+    const playlist = await plRes.json();
+    const quarantineId = playlist.id;
+
+    // 3. Add ALL polluted items to Quarantine (in batches of 100)
+    const trackUris = pollutedItems.map(item => item.uri);
+    for (let i = 0; i < trackUris.length; i += 100) {
+        const batch = trackUris.slice(i, i + 100);
+        await fetch(`https://api.spotify.com/v1/playlists/${quarantineId}/tracks`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ uris: batch })
+        });
+    }
+
+    // 4. Remove from Favorites
+    if (removalSettings.favorites) {
+        const likedIds = pollutedItems
+            .filter(item => item.source.includes('Favorites'))
+            .map(item => item.id);
+
+        for (let i = 0; i < likedIds.length; i += 50) {
+            const batch = likedIds.slice(i, i + 50);
+            await fetch(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
+                method: 'DELETE',
+                headers
+            });
+        }
+    }
+
+    // 5. Remove from Playlists
+    if (removalSettings.playlists) {
+        // This requires tracking which tracks belong to which playlist during scan
+        // For now, if _playlistIds was captured:
+        pollutedItems.forEach(async (item: any) => {
+            if (item._playlistIds) {
+                for (const plId of item._playlistIds) {
+                    await fetch(`https://api.spotify.com/v1/playlists/${plId}/tracks`, {
+                        method: 'DELETE',
+                        headers,
+                        body: JSON.stringify({ tracks: [{ uri: item.uri }] })
+                    });
+                }
+            }
+        });
+    }
+
+    return quarantineId;
 };

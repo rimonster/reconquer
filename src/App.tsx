@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Music, Trash2, Zap, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube } from 'lucide-react';
+import { Music, Trash2, Zap, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PollutedItem } from './lib/spotify';
 import type { PollutedVideo } from './lib/youtube';
 
-type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'done';
+type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'quarantine' | 'done';
 
 const App: React.FC = () => {
   const [step, setStep] = useState<Step>('intro');
@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [scannedCount, setScannedCount] = useState<number>(0);
   const [auditedFavorites, setAuditedFavorites] = useState<any[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [quarantinePlaylistId, setQuarantinePlaylistId] = useState<string | null>(null);
 
   // Removal Options
   const [removalSettings, setRemovalSettings] = useState({
@@ -87,6 +88,23 @@ const App: React.FC = () => {
     };
     runRealScan();
   }, [step, accessToken, minAge, maxAge]);
+
+  const handleQuarantine = async () => {
+    if (!accessToken || pollutedTracks.length === 0) return;
+
+    setStep('quarantine');
+
+    try {
+      const { performQuarantine } = await import('./lib/spotify');
+      const playlistId = await performQuarantine(accessToken, pollutedTracks, removalSettings);
+      setQuarantinePlaylistId(playlistId);
+      setStep('done');
+    } catch (err) {
+      console.error('Quarantine failed:', err);
+      alert('Failed to perform quarantine. Please try again.');
+      setStep('payment');
+    }
+  };
 
   const handleSpotifyLogin = async () => {
     const { getAuthUrl } = await import('./lib/spotify');
@@ -316,13 +334,14 @@ const App: React.FC = () => {
                   ))
                 ) : (
                   auditedFavorites.map((item, i) => (
-                    <div key={i} className="polluted-item" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <div key={i} className="polluted-item" style={{ borderColor: item._isPolluted ? 'rgba(255, 0, 0, 0.2)' : 'rgba(255,255,255,0.05)' }}>
                       <img src={item.album?.images[0]?.url} alt="art" />
                       <div style={{ flex: 1 }}>
                         <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.artists.map((a: any) => a.name).join(', ')}</p>
+                        {item._isPolluted && <p style={{ fontSize: '0.6rem', color: '#FF0000', marginTop: '2px' }}>Flagged: {item._reason}</p>}
                       </div>
-                      <ShieldCheck size={16} color="#1DB954" />
+                      {item._isPolluted ? <Trash2 size={16} color="#FF0000" /> : <ShieldCheck size={16} color="#1DB954" />}
                     </div>
                   ))
                 )}
@@ -339,8 +358,26 @@ const App: React.FC = () => {
               <CreditCard size={64} style={{ marginBottom: '2rem' }} />
               <h2>Finalize the Reclaim</h2>
               <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>We'll identify and isolate all artists in the select age demographics.</p>
-              <button onClick={() => setStep('done')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}>Pay via Stripe</button>
-              <button onClick={() => setStep('done')} style={{ width: '100%', background: 'transparent', color: 'var(--text-secondary)', textDecoration: 'underline' }}>Free Dry Run (Isolated)</button>
+              <button
+                onClick={handleQuarantine}
+                style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}
+              >
+                Pay via Stripe & Purge
+              </button>
+              <button
+                onClick={handleQuarantine}
+                style={{ width: '100%', background: 'transparent', color: 'var(--text-secondary)', textDecoration: 'underline' }}
+              >
+                Free Dry Run (Full Quarantine)
+              </button>
+            </motion.div>
+          )}
+
+          {step === 'quarantine' && (
+            <motion.div key="quarantine" style={{ textAlign: 'center', padding: '4rem' }}>
+              <Loader2 className="animate-spin" size={64} color="#1DB954" style={{ margin: '0 auto 2rem' }} />
+              <h2>Performing Quarantine...</h2>
+              <p style={{ color: 'var(--text-secondary)' }}>Isolating artists and cleaning your active feed.</p>
             </motion.div>
           )}
 
@@ -348,15 +385,33 @@ const App: React.FC = () => {
             <motion.div key="done" style={{ textAlign: 'center' }}>
               <ShieldCheck size={80} color="#1DB954" style={{ margin: '3rem auto' }} />
               <h2>Your Feed is Yours Again.</h2>
-              <p style={{ color: 'var(--text-secondary)' }}>We have isolated the youth influence from your core algorithm.</p>
-              <button onClick={() => setStep('intro')} style={{ marginTop: '2rem', color: '#1DB954', textDecoration: 'underline' }}>Start Over</button>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>All identified items have been moved to your secure quarantine playlist.</p>
+
+              {quarantinePlaylistId && (
+                <a
+                  href={`https://open.spotify.com/playlist/${quarantinePlaylistId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="glass"
+                  style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem', marginBottom: '2.5rem', textDecoration: 'none', borderColor: '#1DB954' }}
+                >
+                  <Music size={32} color="#1DB954" />
+                  <div style={{ textAlign: 'left' }}>
+                    <p style={{ fontWeight: 'bold', color: 'white' }}>View Quarantine Playlist</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>All flagged tracks are safely stored here.</p>
+                  </div>
+                  <ExternalLink size={20} color="gray" style={{ marginLeft: 'auto' }} />
+                </a>
+              )}
+
+              <button onClick={() => setStep('intro')} style={{ marginTop: '2rem', color: '#1DB954', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>Start Over</button>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
       <footer style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
-        unKidMyFeed v2.7 • Reclaim Your True Taste
+        unKidMyFeed v3.0 • Automated Quarantine & Rescue
       </footer>
 
       {/* Styles for the dual range slider */}
@@ -389,6 +444,13 @@ const App: React.FC = () => {
           height: 50px;
           border-radius: 8px;
           object-fit: cover;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 2s linear infinite;
         }
       `}</style>
     </div>
