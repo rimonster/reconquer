@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Ensure base directory is correct
+  RewriteBase /unkid/
+
+  # --- Handle OAuth Callback specifically ---
+  # Redirect /callback to indexing but preserve query params for the SPA to handle
+  RewriteRule ^callback/?$ index.html [L,QSA]
+
+  # --- General SPA Routing ---
+  # If the requested filename is not a file or directory, send to index.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>

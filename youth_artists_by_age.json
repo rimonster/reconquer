@@ -1,0 +1,497 @@
+{
+  "metadata": {
+    "description": "Popular music artists by age demographic for American audiences",
+    "last_updated": "2024-2025",
+    "note": "Spotify IDs need to be added - find them at open.spotify.com/artist/[ID] or by sharing artist link",
+    "instructions": "To get Spotify ID: Open artist page on Spotify > Click '...' > Share > Copy link > Extract ID from URL between '/artist/' and '?'"
+  },
+  "age_groups": {
+    "ages_8_12": {
+      "description": "Elementary to middle school kids",
+      "artists": [
+        {
+          "name": "Taylor Swift",
+          "spotify_id": "06HL4z0CvFAxyc27GXpf02",
+          "notes": "Clean pop, relatable lyrics, very kid-friendly content"
+        },
+        {
+          "name": "Olivia Rodrigo",
+          "spotify_id": "1McMsnEElThX1knmY4oliG",
+          "notes": "Teen pop, Disney background, popular with tweens"
+        },
+        {
+          "name": "Sabrina Carpenter",
+          "spotify_id": "74KM79TiuVKeVCqs8QtB0B",
+          "notes": "Disney Channel background, pop"
+        },
+        {
+          "name": "BoywithUke",
+          "spotify_id": "4TXdHyuAOl3rAkRzEWnRQS",
+          "notes": "Alternative pop, masked performer, very popular with 8-12 boys"
+        },
+        {
+          "name": "Imagine Dragons",
+          "spotify_id": "53XhwfbYqKCa1cC15pYq2q",
+          "notes": "Rock/pop, anthemic, family-friendly"
+        },
+        {
+          "name": "Ed Sheeran",
+          "spotify_id": "6eUKZXaKkcviH0Ku9w2n3V",
+          "notes": "Pop, acoustic, generally appropriate"
+        },
+        {
+          "name": "The Weeknd",
+          "spotify_id": "1Xyo4u8uXC1ZmMpatF05PJ",
+          "notes": "R&B/pop - NOTE: Some explicit content, parental discretion advised"
+        },
+        {
+          "name": "Bruno Mars",
+          "spotify_id": "0du5cEVh5yTK9QJze8zA0C",
+          "notes": "Pop/funk, upbeat"
+        },
+        {
+          "name": "OneRepublic",
+          "spotify_id": "5Pwc4xIPtQLFEnJriah9YJ",
+          "notes": "Pop rock, anthemic"
+        },
+        {
+          "name": "Dua Lipa",
+          "spotify_id": "6M2wZ9GZgrQXHCFfjv46we",
+          "notes": "Pop, dance"
+        },
+        {
+          "name": "Jonas Brothers",
+          "spotify_id": "7gOdHgIoIKoe4i9Tta6qdD",
+          "notes": "Pop rock, Disney background"
+        },
+        {
+          "name": "Ariana Grande",
+          "spotify_id": "66CXWjxzNUsdJxJ2JdwvnR",
+          "notes": "Pop, Nickelodeon background"
+        },
+        {
+          "name": "Shawn Mendes",
+          "spotify_id": "7n2wHs1TKAczGzO7Dd2rGr",
+          "notes": "Pop, teen heartthrob"
+        },
+        {
+          "name": "Selena Gomez",
+          "spotify_id": "0C8ZW7ezQVs4URX5aX7Kqx",
+          "notes": "Pop, Disney background"
+        }
+      ]
+    },
+    "ages_13_15": {
+      "description": "Middle school to early high school",
+      "artists": [
+        {
+          "name": "Billie Eilish",
+          "spotify_id": "6qqNVTkY8uBg9cP3Jd7DAH",
+          "notes": "Alternative pop, teen icon"
+        },
+        {
+          "name": "Olivia Rodrigo",
+          "spotify_id": "1McMsnEElThX1knmY4oliG",
+          "notes": "Pop/rock, Gen Z anthem writer"
+        },
+        {
+          "name": "Sabrina Carpenter",
+          "spotify_id": "74KM79TiuVKeVCqs8QtB0B",
+          "notes": "Pop, breakout 2024"
+        },
+        {
+          "name": "Gracie Abrams",
+          "spotify_id": "4ITSKMVqHxlyZdTGRmvmom",
+          "notes": "Indie pop, emotional, relatable"
+        },
+        {
+          "name": "Chappell Roan",
+          "spotify_id": "7GlBOeep6PqTfFi59PTUUN",
+          "notes": "Pop, LGBTQ+ icon, theatrical"
+        },
+        {
+          "name": "Taylor Swift",
+          "spotify_id": "06HL4z0CvFAxyc27GXpf02",
+          "notes": "Pop, dominant across age groups"
+        },
+        {
+          "name": "Conan Gray",
+          "spotify_id": "6kxEnWbYOJToAzScfH0yWu",
+          "notes": "Indie pop, YouTube origin, Gen Z favorite"
+        },
+        {
+          "name": "Harry Styles",
+          "spotify_id": "6KImCVD70vtIoJWnq6nGn3",
+          "notes": "Pop/rock, former One Direction"
+        },
+        {
+          "name": "Benson Boone",
+          "spotify_id": "64tJ2EAv1R6UaZqc4iOCyj",
+          "notes": "Pop, 2024 breakout, American Idol background"
+        },
+        {
+          "name": "Tyler, The Creator",
+          "spotify_id": "4V8LLVI7PbaPR0K2TGSxFF",
+          "notes": "Hip hop, creative, alternative"
+        },
+        {
+          "name": "Drake",
+          "spotify_id": "3TVXtAsR1Inumwj472S9r4",
+          "notes": "Hip hop/R&B - NOTE: Explicit content"
+        },
+        {
+          "name": "Bad Bunny",
+          "spotify_id": "4q3ewBCX7sLwd24euuV69X",
+          "notes": "Reggaeton, Latin trap"
+        },
+        {
+          "name": "SZA",
+          "spotify_id": "7tYKF4w9nC0nq9CsPZTHyP",
+          "notes": "R&B, alternative"
+        },
+        {
+          "name": "The Neighbourhood",
+          "spotify_id": "77SW9BnxLY8rJ0RciFqkHh",
+          "notes": "Alternative rock, moody"
+        },
+        {
+          "name": "Arctic Monkeys",
+          "spotify_id": "7Ln80lUS6He07XvHI8qqHH",
+          "notes": "Indie rock, British"
+        }
+      ]
+    },
+    "ages_16_18": {
+      "description": "High school juniors/seniors",
+      "artists": [
+        {
+          "name": "Drake",
+          "spotify_id": "3TVXtAsR1Inumwj472S9r4",
+          "notes": "Hip hop/R&B, top of teen Spotify Wrapped"
+        },
+        {
+          "name": "Tyler, The Creator",
+          "spotify_id": "4V8LLVI7PbaPR0K2TGSxFF",
+          "notes": "Hip hop, Chromakopia album 2024"
+        },
+        {
+          "name": "Kendrick Lamar",
+          "spotify_id": "2YZyLoL8N0Wb9xBt1NhZWg",
+          "notes": "Hip hop, lyrical, critically acclaimed"
+        },
+        {
+          "name": "Taylor Swift",
+          "spotify_id": "06HL4z0CvFAxyc27GXpf02",
+          "notes": "Pop, multi-generational appeal"
+        },
+        {
+          "name": "Billie Eilish",
+          "spotify_id": "6qqNVTkY8uBg9cP3Jd7DAH",
+          "notes": "Alternative pop, Gen Z icon"
+        },
+        {
+          "name": "The Weeknd",
+          "spotify_id": "1Xyo4u8uXC1ZmMpatF05PJ",
+          "notes": "R&B, pop"
+        },
+        {
+          "name": "Bad Bunny",
+          "spotify_id": "4q3ewBCX7sLwd24euuV69X",
+          "notes": "Reggaeton, Latin music leader"
+        },
+        {
+          "name": "Travis Scott",
+          "spotify_id": "0Y5tJX1MQlPlqiwlOH1tJY",
+          "notes": "Hip hop, trap"
+        },
+        {
+          "name": "Post Malone",
+          "spotify_id": "246dkjvS1zLTtiykXe5h60",
+          "notes": "Hip hop, pop, rock fusion"
+        },
+        {
+          "name": "Playboi Carti",
+          "spotify_id": "699OTQXzgjhIYAHMy9RyPD",
+          "notes": "Hip hop, experimental"
+        },
+        {
+          "name": "Lil Baby",
+          "spotify_id": "5f7VJjfbwm532GiveGC0ZK",
+          "notes": "Hip hop, trap"
+        },
+        {
+          "name": "21 Savage",
+          "spotify_id": "1URnnhqYAYcrqrcwql10ft",
+          "notes": "Hip hop"
+        },
+        {
+          "name": "Metro Boomin",
+          "spotify_id": "0iEtIxbK0KxaSlF7G42ZOp",
+          "notes": "Hip hop producer"
+        },
+        {
+          "name": "Frank Ocean",
+          "spotify_id": "2h93pZq0e7k5yf4dywlkpM",
+          "notes": "R&B, alternative"
+        },
+        {
+          "name": "Doja Cat",
+          "spotify_id": "5cj0lLjcoR7YOSnhnX0Po5",
+          "notes": "Pop, hip hop, experimental"
+        },
+        {
+          "name": "Lana Del Rey",
+          "spotify_id": "00FQb4jTyendYWaN8pK0wa",
+          "notes": "Alternative pop, indie"
+        },
+        {
+          "name": "Tame Impala",
+          "spotify_id": "5INjqkS1o8h1imAzPqGZBb",
+          "notes": "Psychedelic rock, indie"
+        }
+      ]
+    },
+    "disney_nickelodeon_background": {
+      "description": "Artists with Disney/Nickelodeon background (various ages)",
+      "artists": [
+        {
+          "name": "Miley Cyrus",
+          "spotify_id": "5YGY8feqx7naU7z4HrwZM6",
+          "notes": "Hannah Montana, pop/rock"
+        },
+        {
+          "name": "Selena Gomez",
+          "spotify_id": "0C8ZW7ezQVs4URX5aX7Kqx",
+          "notes": "Wizards of Waverly Place, pop"
+        },
+        {
+          "name": "Demi Lovato",
+          "spotify_id": "6S2OmqARrzebs0tKUEyXyp",
+          "notes": "Camp Rock, pop/rock"
+        },
+        {
+          "name": "Ariana Grande",
+          "spotify_id": "66CXWjxzNUsdJxJ2JdwvnR",
+          "notes": "Victorious (Nickelodeon), pop"
+        },
+        {
+          "name": "Olivia Rodrigo",
+          "spotify_id": "1McMsnEElThX1knmY4oliG",
+          "notes": "High School Musical series, pop/rock"
+        },
+        {
+          "name": "Sabrina Carpenter",
+          "spotify_id": "74KM79TiuVKeVCqs8QtB0B",
+          "notes": "Girl Meets World, pop"
+        },
+        {
+          "name": "Jonas Brothers",
+          "spotify_id": "7gOdHgIoIKoe4i9Tta6qdD",
+          "notes": "Camp Rock, pop rock"
+        },
+        {
+          "name": "Zendaya",
+          "spotify_id": "252P0Q41czPFxWJ5KPv3NU",
+          "notes": "Shake It Up, pop/R&B"
+        },
+        {
+          "name": "Dove Cameron",
+          "spotify_id": "4kI8Ie27vjvonwaB2ePh8T",
+          "notes": "Descendants, pop"
+        },
+        {
+          "name": "Bridgit Mendler",
+          "spotify_id": "6FbDoZnMBTdhhhLuJBOOqP",
+          "notes": "Good Luck Charlie, pop"
+        },
+        {
+          "name": "Ross Lynch",
+          "spotify_id": "6Wr3hh341P84m3EI8qdn9O",
+          "notes": "Austin & Ally, pop/rock"
+        },
+        {
+          "name": "Bella Thorne",
+          "spotify_id": "6NHLwNWqAJGv0eTdqe9xsV",
+          "notes": "Shake It Up, pop"
+        }
+      ]
+    },
+    "emerging_young_artists": {
+      "description": "Rising stars popular with youth 2024-2025",
+      "artists": [
+        {
+          "name": "Tate McRae",
+          "spotify_id": "45dkTj5sMRSjrmBSBeiHym",
+          "notes": "Pop, dance, Canadian"
+        },
+        {
+          "name": "Reneé Rapp",
+          "spotify_id": "00FQb4jTyendYWaN8pK0wa",
+          "notes": "Pop, Broadway background"
+        },
+        {
+          "name": "Megan Moroney",
+          "spotify_id": "1xCEzBxXWLpC0Gtzfvqm7N",
+          "notes": "Country, rising"
+        },
+        {
+          "name": "Jungkook",
+          "spotify_id": "6HaGTQPmzraVmaVxvz6EUc",
+          "notes": "K-pop, BTS solo"
+        },
+        {
+          "name": "Peso Pluma",
+          "spotify_id": "3Glm5v75J5EcL8Xjx6kV6s",
+          "notes": "Regional Mexican, corridos tumbados"
+        },
+        {
+          "name": "Ice Spice",
+          "spotify_id": "1c8gk2PeTE04xOg7KUv8lc",
+          "notes": "Hip hop, Bronx drill"
+        },
+        {
+          "name": "NewJeans",
+          "spotify_id": "6HvZYsbFfjnjFrWF950C9d",
+          "notes": "K-pop girl group"
+        },
+        {
+          "name": "Chase Atlantic",
+          "spotify_id": "7cYEt1pqMgzUN7hxTTNOLF",
+          "notes": "Alternative R&B, rock"
+        },
+        {
+          "name": "Artemas",
+          "spotify_id": "4SpbR6yFEvexJuaBpgAU5g",
+          "notes": "Alternative pop, UK"
+        },
+        {
+          "name": "Sombr",
+          "spotify_id": "SPOTIFY_ID_NEEDED",
+          "notes": "Viral TikTok, yearning anthem artist"
+        }
+      ]
+    },
+    "k_pop_groups": {
+      "description": "K-pop artists popular with American teens",
+      "artists": [
+        {
+          "name": "BTS",
+          "spotify_id": "3Nrfpe0tUJi4K4DXYWgMUX",
+          "notes": "K-pop, global phenomenon"
+        },
+        {
+          "name": "BLACKPINK",
+          "spotify_id": "41MozSoPIsD1dJM0CLPjZF",
+          "notes": "K-pop girl group"
+        },
+        {
+          "name": "NewJeans",
+          "spotify_id": "6HvZYsbFfjnjFrWF950C9d",
+          "notes": "K-pop, Gen Z favorite"
+        },
+        {
+          "name": "Stray Kids",
+          "spotify_id": "2dIgFjalVxs4ThymZ67YCE",
+          "notes": "K-pop boy group"
+        },
+        {
+          "name": "TOMORROW X TOGETHER (TXT)",
+          "spotify_id": "0ghlgldX5Dd6720Q3qFyQB",
+          "notes": "K-pop boy group"
+        },
+        {
+          "name": "SEVENTEEN",
+          "spotify_id": "7nqOGRxlXj7N2JYbgNEjYH",
+          "notes": "K-pop boy group"
+        },
+        {
+          "name": "TWICE",
+          "spotify_id": "7n2Ycct7Beij7Dj7meI4X0",
+          "notes": "K-pop girl group"
+        },
+        {
+          "name": "ENHYPEN",
+          "spotify_id": "5t5FqBwTcgKTaWmfEbwQY9",
+          "notes": "K-pop boy group"
+        }
+      ]
+    },
+    "family_friendly_note": {
+      "description": "Artists generally considered clean/family-friendly",
+      "artists": [
+        {
+          "name": "Taylor Swift",
+          "spotify_id": "06HL4z0CvFAxyc27GXpf02"
+        },
+        {
+          "name": "Ed Sheeran",
+          "spotify_id": "6eUKZXaKkcviH0Ku9w2n3V"
+        },
+        {
+          "name": "Imagine Dragons",
+          "spotify_id": "53XhwfbYqKCa1cC15pYq2q"
+        },
+        {
+          "name": "Jonas Brothers",
+          "spotify_id": "7gOdHgIoIKoe4i9Tta6qdD"
+        },
+        {
+          "name": "OneRepublic",
+          "spotify_id": "5Pwc4xIPtQLFEnJriah9YJ"
+        },
+        {
+          "name": "Shawn Mendes",
+          "spotify_id": "7n2wHs1TKAczGzO7Dd2rGr"
+        },
+        {
+          "name": "Olivia Rodrigo",
+          "spotify_id": "1McMsnEElThX1knmY4oliG"
+        },
+        {
+          "name": "BoywithUke",
+          "spotify_id": "4TXdHyuAOl3rAkRzEWnRQS"
+        }
+      ]
+    },
+    "explicit_content_warning": {
+      "description": "Popular artists with frequent explicit content - parental guidance recommended",
+      "artists": [
+        {
+          "name": "Drake",
+          "spotify_id": "3TVXtAsR1Inumwj472S9r4",
+          "warning": "Explicit lyrics, mature themes"
+        },
+        {
+          "name": "Kendrick Lamar",
+          "spotify_id": "2YZyLoL8N0Wb9xBt1NhZWg",
+          "warning": "Explicit lyrics, complex themes"
+        },
+        {
+          "name": "Travis Scott",
+          "spotify_id": "0Y5tJX1MQlPlqiwlOH1tJY",
+          "warning": "Explicit content"
+        },
+        {
+          "name": "21 Savage",
+          "spotify_id": "1URnnhqYAYcrqrcwql10ft",
+          "warning": "Explicit lyrics, violent themes"
+        },
+        {
+          "name": "Playboi Carti",
+          "spotify_id": "699OTQXzgjhIYAHMy9RyPD",
+          "warning": "Explicit content"
+        },
+        {
+          "name": "Doja Cat",
+          "spotify_id": "5cj0lLjcoR7YOSnhnX0Po5",
+          "warning": "Some explicit content"
+        },
+        {
+          "name": "The Weeknd",
+          "spotify_id": "1Xyo4u8uXC1ZmMpatF05PJ",
+          "warning": "Adult themes, some explicit"
+        }
+      ]
+    }
+  }
+}
