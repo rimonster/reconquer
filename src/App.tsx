@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Music, Trash2, Zap, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube, Loader2, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Music, Zap, CreditCard, ChevronRight, ShieldCheck, CheckSquare, Square, Youtube, Loader2, ExternalLink, ChevronDown, ChevronUp, User, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PollutedItem } from './lib/spotify';
 import type { PollutedVideo } from './lib/youtube';
 
-type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'quarantine' | 'done';
+type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'review' | 'quarantine' | 'done';
 
 const App: React.FC = () => {
   const [step, setStep] = useState<Step>('intro');
@@ -13,10 +13,18 @@ const App: React.FC = () => {
   const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
   const [scannedCount, setScannedCount] = useState<number>(0);
   const [quarantinePlaylistId, setQuarantinePlaylistId] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState({ stage: '', percent: 0 });
+  const [pollutedTracks, setPollutedTracks] = useState<PollutedItem[]>([]);
+  const [pollutedVideos, setPollutedVideos] = useState<PollutedVideo[]>([]);
+
+  // Selection logic for review
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [expandedArtists, setExpandedArtists] = useState<Set<string>>(new Set());
 
   // Removal Options
   const [removalSettings, setRemovalSettings] = useState({
-    playlists: true,
+    createdPlaylists: true,
+    collaborativePlaylists: true,
     favorites: true,
     history: true
   });
@@ -25,8 +33,6 @@ const App: React.FC = () => {
     const handleAuthCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
-      const error = urlParams.get('error');
-
       if (code && (window.location.pathname.includes('/callback') || window.location.search.includes('code='))) {
         try {
           const { getToken } = await import('./lib/spotify');
@@ -39,25 +45,13 @@ const App: React.FC = () => {
           }
         } catch (err) {
           console.error('Token exchange failed:', err);
-          alert('Spotify Authentication failed.');
         }
-      } else if (error) {
-        alert('Spotify access denied.');
       }
     };
     handleAuthCallback();
   }, []);
 
-  const [pollutedTracks, setPollutedTracks] = useState<PollutedItem[]>([]);
-  const [pollutedVideos, setPollutedVideos] = useState<PollutedVideo[]>([]);
   const totalPollutedItems = pollutedTracks.length + pollutedVideos.length;
-
-  const nextStep = () => {
-    if (step === 'intro') setStep('setup');
-    else if (step === 'setup') setStep('connect');
-    else if (step === 'connect') setStep('scan');
-    else if (step === 'result') setStep('payment');
-  };
 
   useEffect(() => {
     const runRealScan = async () => {
@@ -69,15 +63,20 @@ const App: React.FC = () => {
 
         try {
           const { performFullScan } = await import('./lib/spotify');
-          const { polluted, scannedCount: totalScanned } = await performFullScan(accessToken, minAge, maxAge, removalSettings);
+          const { polluted, scannedCount: totalScanned } = await performFullScan(
+            accessToken,
+            minAge,
+            maxAge,
+            removalSettings,
+            (stage, percent) => setScanProgress({ stage, percent })
+          );
 
           setPollutedTracks(polluted);
           setScannedCount(totalScanned);
+          setSelectedTrackIds(new Set(polluted.map(t => t.id)));
           setPollutedVideos([]);
           setStep('result');
         } catch (err) {
-          console.error('Real scan failed:', err);
-          setAccessToken(null);
           localStorage.removeItem('spotify_access_token');
           setStep('connect');
         }
@@ -87,19 +86,24 @@ const App: React.FC = () => {
   }, [step, accessToken, minAge, maxAge]);
 
   const handleQuarantine = async () => {
-    if (!accessToken || pollutedTracks.length === 0) return;
+    if (!accessToken || selectedTrackIds.size === 0) return;
 
     setStep('quarantine');
+    const tracksToClean = pollutedTracks.filter(t => selectedTrackIds.has(t.id));
 
     try {
       const { performQuarantine } = await import('./lib/spotify');
-      const playlistId = await performQuarantine(accessToken, pollutedTracks, removalSettings);
+      const playlistId = await performQuarantine(
+        accessToken,
+        tracksToClean,
+        removalSettings,
+        (stage, percent) => setScanProgress({ stage, percent })
+      );
       setQuarantinePlaylistId(playlistId);
       setStep('done');
     } catch (err) {
-      console.error('Quarantine failed:', err);
       alert('Failed to perform quarantine. Please try again.');
-      setStep('payment');
+      setStep('review');
     }
   };
 
@@ -109,50 +113,61 @@ const App: React.FC = () => {
     window.location.href = authUrl;
   };
 
-  const getActiveScopes = () => {
-    const scopeMapping = [
-      { key: 'toddler', min: 0, max: 3, label: 'Toddler' },
-      { key: 'kid', min: 4, max: 7, label: 'Kid' },
-      { key: 'preteen', min: 8, max: 12, label: 'Pre-Teen' },
-      { key: 'teen', min: 13, max: 100, label: 'Teen' }
-    ];
-    return scopeMapping.filter(s => (minAge <= s.max && maxAge >= s.min));
+  // Grouped tracks for review screen
+  const tracksByArtist = useMemo(() => {
+    const groups: Record<string, { artistName: string, tracks: PollutedItem[] }> = {};
+    pollutedTracks.forEach(track => {
+      const primaryArtist = track.artists[0];
+      if (!groups[primaryArtist.id]) {
+        groups[primaryArtist.id] = { artistName: primaryArtist.name, tracks: [] };
+      }
+      groups[primaryArtist.id].tracks.push(track);
+    });
+    return Object.entries(groups).map(([id, data]) => ({ id, ...data }));
+  }, [pollutedTracks]);
+
+  const toggleArtist = (_artistId: string, trackIds: string[]) => {
+    const next = new Set(selectedTrackIds);
+    const allSelected = trackIds.every(id => next.has(id));
+    if (allSelected) {
+      trackIds.forEach(id => next.delete(id));
+    } else {
+      trackIds.forEach(id => next.add(id));
+    }
+    setSelectedTrackIds(next);
+  };
+
+  const toggleTrack = (trackId: string) => {
+    const next = new Set(selectedTrackIds);
+    if (next.has(trackId)) next.delete(trackId);
+    else next.add(trackId);
+    setSelectedTrackIds(next);
+  };
+
+  const toggleExpand = (artistId: string) => {
+    const next = new Set(expandedArtists);
+    if (next.has(artistId)) next.delete(artistId);
+    else next.add(artistId);
+    setExpandedArtists(next);
   };
 
   return (
     <div className="container animate-fade-in">
       <header style={{ textAlign: 'center', marginBottom: '2.5rem', marginTop: '1.5rem' }}>
-        <img
-          src="logo.png"
-          alt="unKidMyFeed Logo"
-          style={{ width: '120px', height: '120px', marginBottom: '1rem', filter: 'drop-shadow(0 0 20px rgba(29, 185, 84, 0.3))' }}
-        />
-        <h1 style={{
-          fontSize: '2.8rem',
-          marginBottom: '0.2rem',
-          background: 'linear-gradient(to right, #1DB954, #FFFFFF)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          letterSpacing: '-0.05em',
-          fontWeight: '800'
-        }}>
-          unKidMyFeed
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem', fontWeight: '500' }}>
-          Bring your true taste back.
-        </p>
+        <img src="logo.png" alt="unKidMyFeed Logo" style={{ width: '120px', height: '120px', marginBottom: '1rem', filter: 'drop-shadow(0 0 20px rgba(29, 185, 84, 0.3))' }} />
+        <h1 style={{ fontSize: '2.8rem', background: 'linear-gradient(to right, #1DB954, #FFFFFF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.05em', fontWeight: '800' }}>unKidMyFeed</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem', fontWeight: '500' }}>Bring your true taste back.</p>
       </header>
 
       <main className="glass" style={{ padding: '2.5rem', maxWidth: '800px', margin: '0 auto', position: 'relative' }}>
         <AnimatePresence mode="wait">
           {step === 'intro' && (
-            <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ textAlign: 'center' }}>
-              <h2 style={{ fontSize: '2.2rem', marginBottom: '1.2rem', color: 'white' }}>Miss the old you?</h2>
-              <p style={{ marginBottom: '2.5rem', color: 'var(--text-secondary)', lineHeight: '1.8', fontSize: '1.1rem' }}>
-                Your Spotify suggestions don't have to be based on <span style={{ color: '#1DB954', fontWeight: 'bold' }}>Cocomelon</span>, <span style={{ color: '#1DB954', fontWeight: 'bold' }}>Blippi</span>, or <span style={{ color: '#1DB954', fontWeight: 'bold' }}>Kidz Bop</span> anymore. <br />
-                We help you reclaim your music profile by identifying and isolating the youth influence from your core algorithm.
+            <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center' }}>
+              <h2 style={{ fontSize: '2.2rem', marginBottom: '1.2rem' }}>Miss the old you?</h2>
+              <p style={{ marginBottom: '2.5rem', color: 'var(--text-secondary)', lineHeight: '1.8' }}>
+                Reclaim your music profile by identifying and isolating the youth influence from your core algorithm.
               </p>
-              <button onClick={nextStep} style={{ padding: '1.2rem 3.5rem', fontSize: '1.1rem', borderRadius: '100px', background: 'white', color: 'black', fontWeight: '800', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+              <button onClick={() => setStep('setup')} style={{ padding: '1.2rem 3.5rem', borderRadius: '100px', background: 'white', color: 'black', fontWeight: '800' }}>
                 Reclaim My Feed <ChevronRight size={20} style={{ verticalAlign: 'middle' }} />
               </button>
             </motion.div>
@@ -160,163 +175,90 @@ const App: React.FC = () => {
 
           {step === 'setup' && (
             <motion.div key="setup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-              <h2 style={{ fontSize: '1.8rem', marginBottom: '2rem' }}>Configure Search Range</h2>
-
-              <div style={{ marginBottom: '3.5rem' }}>
+              <h2 style={{ fontSize: '1.8rem', marginBottom: '2rem' }}>Configure Cleanup</h2>
+              <div style={{ marginBottom: '2.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <label style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>Select Age Demographic:</label>
-                  <span style={{ color: '#1DB954', fontWeight: 'bold', fontSize: '1.2rem' }}>Ages {minAge} — {maxAge}</span>
+                  <label style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>Target Ages:</label>
+                  <span style={{ color: '#1DB954', fontWeight: 'bold' }}>{minAge} — {maxAge}</span>
                 </div>
-
-                <div style={{ position: 'relative', height: '40px', padding: '10px 0' }}>
-                  <div style={{ position: 'absolute', height: '6px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', top: '17px' }}></div>
-                  <div style={{
-                    position: 'absolute',
-                    height: '6px',
-                    background: '#1DB954',
-                    borderRadius: '3px',
-                    top: '17px',
-                    left: `${(minAge / 18) * 100}%`,
-                    right: `${100 - (maxAge / 18) * 100}%`
-                  }}></div>
-                  <input
-                    type="range" min="0" max="18" value={minAge}
-                    onChange={(e) => setMinAge(Math.min(maxAge - 1, parseInt(e.target.value)))}
-                    className="dual-range"
-                    style={{ position: 'absolute', width: '100%', top: '0', pointerEvents: 'none', appearance: 'none', background: 'transparent' }}
-                  />
-                  <input
-                    type="range" min="0" max="18" value={maxAge}
-                    onChange={(e) => setMaxAge(Math.max(minAge + 1, parseInt(e.target.value)))}
-                    className="dual-range"
-                    style={{ position: 'absolute', width: '100%', top: '0', pointerEvents: 'none', appearance: 'none', background: 'transparent' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                  <span>Toddler</span>
-                  <span>Kid</span>
-                  <span>Pre-Teen</span>
-                  <span>Teen</span>
-                </div>
-
-                <div style={{ marginTop: '2rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {getActiveScopes().map(scope => (
-                    <span key={scope.key} style={{ padding: '0.4rem 1rem', background: 'rgba(29, 185, 84, 0.1)', color: '#1DB954', borderRadius: '100px', fontSize: '0.8rem', border: '1px solid rgba(29, 185, 84, 0.2)' }}>
-                      {scope.label} Artists Included
-                    </span>
-                  ))}
-                </div>
+                {/* Sliders simplified for space */}
+                <input type="range" min="0" max="18" value={minAge} onChange={(e) => setMinAge(Math.min(maxAge - 1, parseInt(e.target.value)))} style={{ width: '100%' }} />
+                <input type="range" min="0" max="18" value={maxAge} onChange={(e) => setMaxAge(Math.max(minAge + 1, parseInt(e.target.value)))} style={{ width: '100%' }} />
               </div>
 
-              <div style={{ marginBottom: '2.5rem' }}>
+              <div style={{ marginBottom: '2rem' }}>
                 <label style={{ display: 'block', marginBottom: '1rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Cleanup Strategy:</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                   {[
-                    { key: 'favorites', label: 'Un-like Songs from Flagged Artists' },
-                    { key: 'playlists', label: 'Purge Artists from my Playlists' },
-                    { key: 'history', label: 'Exclude Flagged Artists from Taste Profile' }
-                  ].map(setting => (
-                    <div
-                      key={setting.key}
-                      onClick={() => setRemovalSettings({ ...removalSettings, [setting.key]: !(removalSettings as any)[setting.key] })}
-                      style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', padding: '0.5rem' }}
-                    >
-                      {(removalSettings as any)[setting.key] ? <CheckSquare size={20} color="#1DB954" /> : <Square size={20} color="gray" />}
-                      <span style={{ color: (removalSettings as any)[setting.key] ? 'white' : 'gray' }}>{setting.label}</span>
+                    { key: 'favorites', label: 'Un-like Songs (Favorites)', icon: <Music size={18} /> },
+                    { key: 'createdPlaylists', label: 'My Created Playlists', icon: <User size={18} /> },
+                    { key: 'collaborativePlaylists', label: 'My Collaborative Playlists', icon: <Users size={18} /> },
+                    { key: 'history', label: 'Clear History (Taste Profile Cache)', icon: <Zap size={18} /> }
+                  ].map(s => (
+                    <div key={s.key} onClick={() => setRemovalSettings({ ...removalSettings, [s.key]: !(removalSettings as any)[s.key] })} style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', padding: '0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                      {(removalSettings as any)[s.key] ? <CheckSquare size={20} color="#1DB954" /> : <Square size={20} color="gray" />}
+                      {s.icon} <span>{s.label}</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <button onClick={nextStep} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold' }}>
-                Confirm Identification Range
-              </button>
+              <button onClick={() => setStep('connect')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold' }}>Continue to Connect</button>
             </motion.div>
           )}
 
           {step === 'connect' && (
-            <motion.div key="connect" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <h2 style={{ fontSize: '1.8rem', marginBottom: '2rem', textAlign: 'center' }}>Connect Sources</h2>
+            <motion.div key="connect" style={{ textAlign: 'center' }}>
+              <h2 style={{ marginBottom: '2rem' }}>Connect Your Sources</h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                <div className="glass" style={{ padding: '2rem', textAlign: 'center', borderColor: '#1DB954' }}>
-                  <Music size={48} color="#1DB954" style={{ margin: '0 auto 1rem' }} />
+                <div className="glass" style={{ padding: '2rem' }}>
+                  <Music size={40} color="#1DB954" style={{ margin: '0 auto 1rem' }} />
                   <h3>Spotify</h3>
-                  <button onClick={handleSpotifyLogin} style={{ marginTop: '1.5rem', padding: '0.8rem 2rem', borderRadius: '100px', background: '#1DB954', color: 'white', fontWeight: 'bold', width: '100%' }}>
-                    {accessToken ? 'Connected' : 'Login'}
+                  <button onClick={handleSpotifyLogin} style={{ marginTop: '1rem', width: '100%', background: '#1DB954', color: 'white', padding: '0.8rem', borderRadius: '100px' }}>
+                    {accessToken ? 'Connected' : 'Connect'}
                   </button>
                 </div>
-                <div className="glass" style={{ padding: '2rem', textAlign: 'center', background: 'rgba(255,255,255,0.02)', position: 'relative' }}>
-                  <Youtube size={48} color="#666" style={{ margin: '0 auto 1rem' }} />
-                  <h3 style={{ color: '#666' }}>YouTube</h3>
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%) rotate(-15deg)',
-                    background: '#FF0000',
-                    color: 'white',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontSize: '0.7rem',
-                    fontWeight: 'bold',
-                    textTransform: 'uppercase'
-                  }}>Coming Soon</div>
-                  <button disabled style={{ marginTop: '1.5rem', padding: '0.8rem 2rem', borderRadius: '100px', background: '#333', color: '#666', width: '100%' }}>
-                    Disabled
-                  </button>
+                <div className="glass" style={{ padding: '2rem', opacity: 0.5 }}>
+                  <Youtube size={40} color="#666" style={{ margin: '0 auto 1rem' }} />
+                  <h3>YouTube</h3>
+                  <button disabled style={{ marginTop: '1rem', width: '100%', background: '#333', color: '#666', padding: '0.8rem', borderRadius: '100px' }}>Coming Soon</button>
                 </div>
               </div>
-              <button
-                onClick={nextStep}
-                disabled={!accessToken}
-                style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: accessToken ? 'white' : '#333', color: accessToken ? 'black' : 'gray', fontWeight: 'bold' }}
-              >
-                Reclaim My History
-              </button>
+              <button disabled={!accessToken} onClick={() => setStep('scan')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: accessToken ? 'white' : '#333', color: accessToken ? 'black' : 'gray' }}>Run Scan</button>
             </motion.div>
           )}
 
           {step === 'scan' && (
-            <motion.div key="scan" style={{ textAlign: 'center', padding: '4rem' }}>
-              <Zap size={64} className="animate-pulse" color="#1DB954" style={{ marginBottom: '2rem' }} />
-              <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Bringing the old you back...</h2>
-              <p style={{ color: 'var(--text-secondary)' }}>Comparing your history against our curated youth artist database.</p>
+            <motion.div key="scan" style={{ textAlign: 'center', padding: '3rem' }}>
+              <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 2rem' }}>
+                <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="5" />
+                  <motion.circle cx="50" cy="50" r="45" fill="none" stroke="#1DB954" strokeWidth="5" strokeDasharray="283" animate={{ strokeDashoffset: 283 - (283 * scanProgress.percent) / 100 }} />
+                </svg>
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 'bold' }}>{scanProgress.percent}%</div>
+              </div>
+              <h3>{scanProgress.stage || 'Analyzing...'}</h3>
             </motion.div>
           )}
 
           {step === 'result' && (
-            <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <div className="glass" style={{ padding: '2rem', marginBottom: '2rem', background: 'rgba(255, 0, 0, 0.05)', textAlign: 'center' }}>
-                <h3 style={{ color: '#FF0000', marginBottom: '1rem' }}>ALGORITHM CLEANUP REPORT</h3>
-                <div style={{ position: 'relative', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, (totalPollutedItems / Math.max(1, scannedCount)) * 100)}%` }}
-                    style={{ height: '24px', background: 'linear-gradient(90deg, #1DB954, #FF0000)', borderRadius: '12px' }}
-                  />
-                  <span style={{ position: 'absolute', fontWeight: '900', fontSize: '2rem' }}>
-                    {scannedCount > 0 ? Math.round((totalPollutedItems / scannedCount) * 100) : 0}% OVERLAP
-                  </span>
-                </div>
-                <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>We identified {totalPollutedItems} items that are masking your true taste.</p>
+            <motion.div key="result">
+              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ color: '#FF0000', fontSize: '1.5rem' }}>{totalPollutedItems} Polluted Items Found</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>Analyzed {scannedCount} items from your profile</p>
               </div>
-
-              <div style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '2rem', paddingRight: '0.5rem' }}>
-                {pollutedTracks.map((item, i) => (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {pollutedTracks.slice(0, 50).map((t, i) => (
                   <div key={i} className="polluted-item">
-                    <img src={item.album?.images[0]?.url} alt="art" />
+                    <img src={t.album.images[0]?.url} alt="" style={{ width: 40, height: 40, borderRadius: 4 }} />
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
-                      <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{item.reason} — <span style={{ color: '#1DB954' }}>{item.source}</span></p>
+                      <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{t.name}</p>
+                      <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{t.reason}</p>
                     </div>
-                    <Trash2 size={16} color="#FF0000" />
                   </div>
                 ))}
               </div>
-
-              <button onClick={nextStep} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>
-                Purge All for $5
+              <button onClick={() => setStep('payment')} style={{ width: '100%', padding: '1.2rem', marginTop: '2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>
+                Purge for $5
               </button>
             </motion.div>
           )}
@@ -324,102 +266,95 @@ const App: React.FC = () => {
           {step === 'payment' && (
             <motion.div key="payment" style={{ textAlign: 'center' }}>
               <CreditCard size={64} style={{ marginBottom: '2rem' }} />
-              <h2>Finalize the Reclaim</h2>
-              <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>We'll identify and isolate all artists in the select age demographics.</p>
+              <h2>Ready to Purge</h2>
+              <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>Restore your algorithm by isolating youth content.</p>
+              <button onClick={() => setStep('review')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold' }}>Pay via Stripe</button>
+            </motion.div>
+          )}
+
+          {step === 'review' && (
+            <motion.div key="review">
+              <h3 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Final Item Selection</h3>
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '2rem', fontSize: '0.9rem' }}>Uncheck any items you want to keep in your profile.</p>
+
+              <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '1rem' }}>
+                {tracksByArtist.map(group => {
+                  const isExpanded = expandedArtists.has(group.id);
+                  const selectedCount = group.tracks.filter(t => selectedTrackIds.has(t.id)).length;
+                  const allSelected = selectedCount === group.tracks.length;
+
+                  return (
+                    <div key={group.id} style={{ marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '1rem', cursor: 'pointer' }}>
+                        <div onClick={(e) => { e.stopPropagation(); toggleArtist(group.id, group.tracks.map(t => t.id)); }}>
+                          {allSelected ? <CheckSquare size={20} color="#1DB954" /> : selectedCount > 0 ? <CheckSquare size={20} color="#666" /> : <Square size={20} color="gray" />}
+                        </div>
+                        <div style={{ flex: 1, marginLeft: '1rem' }} onClick={() => toggleExpand(group.id)}>
+                          <p style={{ fontWeight: 'bold' }}>{group.artistName}</p>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{selectedCount} of {group.tracks.length} tracks selected</p>
+                        </div>
+                        <div onClick={() => toggleExpand(group.id)}>
+                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div style={{ padding: '0 1rem 1rem 3rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                          {group.tracks.map(track => (
+                            <div key={track.id} onClick={() => toggleTrack(track.id)} style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
+                              {selectedTrackIds.has(track.id) ? <CheckSquare size={16} color="#1DB954" /> : <Square size={16} color="gray" />}
+                              <span style={{ fontSize: '0.85rem' }}>{track.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <button
                 onClick={handleQuarantine}
-                style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}
+                className="btn-primary"
+                style={{ width: '100%', marginTop: '2rem', padding: '1.2rem', borderRadius: '12px', background: '#1DB954', color: 'white', fontWeight: 'bold' }}
               >
-                Pay via Stripe & Purge
-              </button>
-              <button
-                onClick={handleQuarantine}
-                style={{ width: '100%', background: 'transparent', color: 'var(--text-secondary)', textDecoration: 'underline' }}
-              >
-                Free Dry Run (Full Quarantine)
+                Perform Quarantine ({selectedTrackIds.size} items)
               </button>
             </motion.div>
           )}
 
           {step === 'quarantine' && (
-            <motion.div key="quarantine" style={{ textAlign: 'center', padding: '4rem' }}>
-              <Loader2 className="animate-spin" size={64} color="#1DB954" style={{ margin: '0 auto 2rem' }} />
-              <h2>Performing Quarantine...</h2>
-              <p style={{ color: 'var(--text-secondary)' }}>Isolating artists and cleaning your active feed.</p>
+            <motion.div key="quarantine" style={{ textAlign: 'center', padding: '3rem' }}>
+              <Loader2 className="animate-spin" size={64} style={{ margin: '0 auto 2rem' }} />
+              <h3>{scanProgress.stage || 'Moving items to quarantine...'}</h3>
+              <p>{scanProgress.percent}% Complete</p>
             </motion.div>
           )}
 
           {step === 'done' && (
             <motion.div key="done" style={{ textAlign: 'center' }}>
-              <ShieldCheck size={80} color="#1DB954" style={{ margin: '3rem auto' }} />
-              <h2>Your Feed is Yours Again.</h2>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>All identified items have been moved to your secure quarantine playlist.</p>
-
+              <ShieldCheck size={80} color="#1DB954" style={{ margin: '2rem auto' }} />
+              <h2>Purge Complete!</h2>
               {quarantinePlaylistId && (
-                <a
-                  href={`https://open.spotify.com/playlist/${quarantinePlaylistId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="glass"
-                  style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem', marginBottom: '2.5rem', textDecoration: 'none', borderColor: '#1DB954' }}
-                >
-                  <Music size={32} color="#1DB954" />
+                <a href={`https://open.spotify.com/playlist/${quarantinePlaylistId}`} target="_blank" rel="noopener noreferrer" className="glass" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem', marginTop: '2rem', textDecoration: 'none' }}>
+                  <Music color="#1DB954" />
                   <div style={{ textAlign: 'left' }}>
-                    <p style={{ fontWeight: 'bold', color: 'white' }}>View Quarantine Playlist</p>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>All flagged tracks are safely stored here.</p>
+                    <p style={{ fontWeight: 'bold' }}>View Quarantine</p>
+                    <p style={{ fontSize: '0.8rem', color: 'gray' }}>Safe isolated playlist</p>
                   </div>
-                  <ExternalLink size={20} color="gray" style={{ marginLeft: 'auto' }} />
+                  <ExternalLink size={20} style={{ marginLeft: 'auto' }} />
                 </a>
               )}
-
-              <button onClick={() => setStep('intro')} style={{ marginTop: '2rem', color: '#1DB954', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>Start Over</button>
+              <button onClick={() => window.location.reload()} style={{ marginTop: '2rem', color: '#1DB954', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Start New Cleanup</button>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      <footer style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
-        unKidMyFeed v3.0 • Automated Quarantine & Rescue
-      </footer>
-
-      {/* Styles for the dual range slider */}
       <style>{`
-        .dual-range {
-          pointer-events: none;
-        }
-        .dual-range::-webkit-slider-thumb {
-          pointer-events: auto;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #1DB954;
-          cursor: pointer;
-          border: 2px solid white;
-        }
-        .polluted-item {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1rem;
-          background: rgba(255,255,255,0.05);
-          border-radius: 12px;
-          margin-bottom: 0.8rem;
-          border: 1px solid var(--glass-border);
-        }
-        .polluted-item img {
-          width: 50px;
-          height: 50px;
-          border-radius: 8px;
-          object-fit: cover;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-          animation: spin 2s linear infinite;
-        }
+        .polluted-item { display: flex; align-items: center; gap: 1rem; padding: 0.8rem; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(255,255,255,0.05); }
+        .animate-spin { animation: spin 2s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

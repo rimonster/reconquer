@@ -136,28 +136,75 @@ export const performFullScan = async (
     accessToken: string,
     minAge: number,
     maxAge: number,
-    removalSettings: { favorites: boolean, playlists: boolean, history: boolean }
+    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean, history: boolean },
+    onProgress?: (stage: string, percent: number) => void
 ): Promise<{ polluted: PollutedItem[], scannedCount: number }> => {
     try {
         const headers = { Authorization: `Bearer ${accessToken}` };
 
-        const likedRes = await fetch('https://api.spotify.com/v1/me/tracks?limit=50', { headers });
-        const likedData = await likedRes.json();
-        const favoritesRaw = (likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' }));
+        // 0. Get user profile to identify owned playlists
+        const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
+        const userData = await userRes.json();
+        const userId = userData.id;
+
+        // Helper function to handle API errors with retries
+        const fetchWithRetry = async (url: string, options: any, retries = 3): Promise<Response> => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+
+                    if (response.status === 429) {
+                        // Rate limited - wait and retry
+                        const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
+                        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                        continue;
+                    }
+
+                    if (response.status === 401) {
+                        throw new Error('AUTHENTICATION_EXPIRED');
+                    }
+
+                    if (!response.ok && response.status >= 500) {
+                        // Server error - retry
+                        if (i < retries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                            continue;
+                        }
+                    }
+
+                    return response;
+                } catch (error: any) {
+                    if (error.message === 'AUTHENTICATION_EXPIRED') throw error;
+                    if (i === retries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                }
+            }
+            throw new Error('Max retries reached');
+        };
+
+        // Fetch ALL liked songs with pagination
+        onProgress?.('Scanning your favorite songs...', 5);
+        const favoritesRaw: any[] = [];
+        let likedUrl: string | null = 'https://api.spotify.com/v1/me/tracks?limit=50';
+        while (likedUrl) {
+            const likedRes = await fetchWithRetry(likedUrl, { headers });
+            const likedData = await likedRes.json();
+            favoritesRaw.push(...(likedData.items || []).map((item: any) => ({ ...item.track, _source: 'Favorites' })));
+            likedUrl = likedData.next;
+        }
+        onProgress?.('Favorite songs scanned', 15);
 
         const fetchPromises: Promise<any>[] = [];
         if (removalSettings.history) {
-            fetchPromises.push(fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', { headers }).then(r => r.json()));
-            fetchPromises.push(fetch('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=short_term', { headers }).then(r => r.json()));
-            fetchPromises.push(fetch('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=medium_term', { headers }).then(r => r.json()));
-            fetchPromises.push(fetch('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=long_term', { headers }).then(r => r.json()));
-        }
-
-        if (removalSettings.playlists) {
-            fetchPromises.push(fetch('https://api.spotify.com/v1/me/playlists?limit=20', { headers }).then(r => r.json()));
+            onProgress?.('Scanning listening history...', 20);
+            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/player/recently-played?limit=50', { headers }).then(r => r.json()));
+            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=short_term', { headers }).then(r => r.json()));
+            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=medium_term', { headers }).then(r => r.json()));
+            fetchPromises.push(fetchWithRetry('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=long_term', { headers }).then(r => r.json()));
         }
 
         const results = await Promise.all(fetchPromises);
+        onProgress?.('Listening history scanned', 30);
         let allTracksRaw: any[] = [];
 
         // Only include favorites in the pollution list if removal is checked
@@ -175,15 +222,46 @@ export const performFullScan = async (
         }
 
         let scannedPlaylists: any[] = [];
-        if (removalSettings.playlists) {
-            scannedPlaylists = results[index++]?.items || [];
-            for (const pl of scannedPlaylists.slice(0, 5)) {
-                const res = await fetch(`https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=50`, { headers });
-                const data = await res.json();
-                (data.items || []).forEach((item: any) => {
-                    if (item.track) allTracksRaw.push({ ...item.track, _source: `Playlist: ${pl.name.slice(0, 15)}...`, _playlistId: pl.id });
+        if (removalSettings.createdPlaylists || removalSettings.collaborativePlaylists) {
+            // Fetch ALL user playlists with pagination
+            onProgress?.('Loading your playlists...', 35);
+            let playlistUrl: string | null = 'https://api.spotify.com/v1/me/playlists?limit=50';
+            while (playlistUrl) {
+                const plRes = await fetchWithRetry(playlistUrl, { headers });
+                const plData = await plRes.json();
+
+                // Filter based on specific user settings
+                const owned = (plData.items || []).filter((pl: any) => {
+                    const isOwner = pl.owner.id === userId;
+                    const isCollab = pl.collaborative;
+
+                    if (isOwner && removalSettings.createdPlaylists) return true;
+                    if (isCollab && removalSettings.collaborativePlaylists) return true;
+                    return false;
                 });
+
+                scannedPlaylists.push(...owned);
+                playlistUrl = plData.next;
             }
+
+            // Scan ALL playlists
+            onProgress?.(`Scanning ${scannedPlaylists.length} playlists...`, 40);
+            for (let i = 0; i < scannedPlaylists.length; i++) {
+                const pl = scannedPlaylists[i];
+                const playlistProgress = 40 + Math.floor((i / scannedPlaylists.length) * 30);
+                onProgress?.(`Scanning playlist: ${pl.name}`, playlistProgress);
+
+                let trackUrl: string | null = `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=50`;
+                while (trackUrl) {
+                    const res = await fetchWithRetry(trackUrl, { headers });
+                    const data = await res.json();
+                    (data.items || []).forEach((item: any) => {
+                        if (item.track) allTracksRaw.push({ ...item.track, _source: `Playlist: ${pl.name.slice(0, 15)}...`, _playlistId: pl.id });
+                    });
+                    trackUrl = data.next;
+                }
+            }
+            onProgress?.('All playlists scanned', 70);
         }
 
         const trackMap = new Map<string, { track: any, sources: Set<string>, playlistIds: Set<string> }>();
@@ -202,20 +280,28 @@ export const performFullScan = async (
 
         const scannedCount = uniqueTracks.length;
 
+        onProgress?.('Analyzing artist genres...', 75);
         const allScannedArtistIds = Array.from(new Set([
             ...uniqueTracks.flatMap(t => t.artists.map((a: { id: string }) => a.id))
         ]));
 
         const artistGenresMap: Record<string, string[]> = {};
+        const totalBatches = Math.ceil(allScannedArtistIds.length / 50);
         for (let i = 0; i < allScannedArtistIds.length; i += 50) {
             const batch = allScannedArtistIds.slice(i, i + 50);
-            const artistResponse = await fetch(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`, { headers });
+            const batchNum = Math.floor(i / 50) + 1;
+            onProgress?.(`Fetching artist data (${batchNum}/${totalBatches})...`, 75 + Math.floor((batchNum / totalBatches) * 15));
+            const artistResponse = await fetchWithRetry(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`, { headers });
             const artistData = await artistResponse.json();
             (artistData.artists || []).forEach((artist: any) => {
-                artistGenresMap[artist.id] = artist.genres || [];
+                // Some artists may be null if the ID is invalid or artist was removed
+                if (artist && artist.id) {
+                    artistGenresMap[artist.id] = artist.genres || [];
+                }
             });
         }
 
+        onProgress?.('Detecting polluted tracks...', 90);
         const polluted: PollutedItem[] = [];
         for (const track of uniqueTracks) {
             const trackGenres = track.artists.flatMap((a: { id: string }) => artistGenresMap[a.id] || []);
@@ -224,6 +310,8 @@ export const performFullScan = async (
                 polluted.push({ ...track, reason, source: track._sources.join(', ') } as PollutedItem);
             }
         }
+
+        onProgress?.('Scan complete!', 100);
 
         return { polluted, scannedCount };
     } catch (error) {
@@ -238,7 +326,8 @@ export const performFullScan = async (
 export const performQuarantine = async (
     accessToken: string,
     pollutedItems: PollutedItem[],
-    removalSettings: { favorites: boolean, playlists: boolean, history: boolean }
+    removalSettings: { favorites: boolean, createdPlaylists: boolean, collaborativePlaylists: boolean, history: boolean },
+    onProgress?: (stage: string, percent: number) => void
 ): Promise<string> => {
     const headers = {
         Authorization: `Bearer ${accessToken}`,
@@ -246,11 +335,13 @@ export const performQuarantine = async (
     };
 
     // 1. Get user profile
+    onProgress?.('Getting user profile...', 5);
     const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
     const userData = await userRes.json();
     const userId = userData.id;
 
     // 2. Create Quarantine Playlist
+    onProgress?.('Creating quarantine playlist...', 10);
     const plRes = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
         method: 'POST',
         headers,
@@ -264,9 +355,13 @@ export const performQuarantine = async (
     const quarantineId = playlist.id;
 
     // 3. Add ALL polluted items to Quarantine (in batches of 100)
+    onProgress?.('Adding tracks to quarantine...', 20);
     const trackUris = pollutedItems.map(item => item.uri);
+    const totalQuarantineBatches = Math.ceil(trackUris.length / 100);
     for (let i = 0; i < trackUris.length; i += 100) {
         const batch = trackUris.slice(i, i + 100);
+        const batchNum = Math.floor(i / 100) + 1;
+        onProgress?.(`Adding batch ${batchNum}/${totalQuarantineBatches} to quarantine...`, 20 + Math.floor((batchNum / totalQuarantineBatches) * 20));
         await fetch(`https://api.spotify.com/v1/playlists/${quarantineId}/tracks`, {
             method: 'POST',
             headers,
@@ -276,12 +371,16 @@ export const performQuarantine = async (
 
     // 4. Remove from Favorites
     if (removalSettings.favorites) {
+        onProgress?.('Removing from favorites...', 45);
         const likedIds = pollutedItems
             .filter(item => item.source.includes('Favorites'))
             .map(item => item.id);
 
+        const totalFavBatches = Math.ceil(likedIds.length / 50);
         for (let i = 0; i < likedIds.length; i += 50) {
             const batch = likedIds.slice(i, i + 50);
+            const batchNum = Math.floor(i / 50) + 1;
+            onProgress?.(`Removing favorites batch ${batchNum}/${totalFavBatches}...`, 45 + Math.floor((batchNum / totalFavBatches) * 25));
             await fetch(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
                 method: 'DELETE',
                 headers
@@ -289,22 +388,57 @@ export const performQuarantine = async (
         }
     }
 
-    // 5. Remove from Playlists
-    if (removalSettings.playlists) {
-        // This requires tracking which tracks belong to which playlist during scan
-        // For now, if _playlistIds was captured:
-        pollutedItems.forEach(async (item: any) => {
-            if (item._playlistIds) {
-                for (const plId of item._playlistIds) {
-                    await fetch(`https://api.spotify.com/v1/playlists/${plId}/tracks`, {
-                        method: 'DELETE',
-                        headers,
-                        body: JSON.stringify({ tracks: [{ uri: item.uri }] })
-                    });
-                }
+    // 5. Remove from Playlists (FIXED: proper async handling with Promise.all)
+    if (removalSettings.createdPlaylists || removalSettings.collaborativePlaylists) {
+        onProgress?.('Removing from playlists...', 70);
+        // Group tracks by playlist ID for efficient batch removal
+        const playlistTrackMap = new Map<string, string[]>();
+
+        pollutedItems.forEach((item: any) => {
+            if (item._playlistIds && item._playlistIds.length > 0) {
+                item._playlistIds.forEach((plId: string) => {
+                    if (!playlistTrackMap.has(plId)) {
+                        playlistTrackMap.set(plId, []);
+                    }
+                    playlistTrackMap.get(plId)!.push(item.uri);
+                });
             }
         });
+
+        const playlistIds = Array.from(playlistTrackMap.keys());
+        const totalPlaylists = playlistIds.length;
+
+        // Process all playlists with proper async handling
+        const removalPromises: Promise<void>[] = [];
+
+        for (let i = 0; i < playlistIds.length; i++) {
+            const plId = playlistIds[i];
+            const trackUris = playlistTrackMap.get(plId) || [];
+
+            onProgress?.(`Removing from playlist ${i + 1}/${totalPlaylists}...`, 70 + Math.floor((i / totalPlaylists) * 25));
+
+            // Remove tracks in batches of 100 (Spotify API limit)
+            for (let j = 0; j < trackUris.length; j += 100) {
+                const batch = trackUris.slice(j, j + 100);
+                const promise = fetch(`https://api.spotify.com/v1/playlists/${plId}/tracks`, {
+                    method: 'DELETE',
+                    headers,
+                    body: JSON.stringify({
+                        tracks: batch.map(uri => ({ uri }))
+                    })
+                }).then(response => {
+                    if (!response.ok) {
+                        console.warn(`Failed to remove tracks from playlist ${plId}:`, response.status);
+                    }
+                });
+                removalPromises.push(promise);
+            }
+        }
+
+        // Wait for ALL removal operations to complete
+        await Promise.all(removalPromises);
     }
 
+    onProgress?.('Quarantine complete!', 100);
     return quarantineId;
 };
