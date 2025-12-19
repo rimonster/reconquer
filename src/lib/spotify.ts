@@ -17,6 +17,32 @@ export interface PollutedItem extends SpotifyTrack {
     source: string; // "History", "Liked Songs", "Top Tracks", etc.
 }
 
+// --- STORAGE UTILS (Handle Iframe/Private Mode) ---
+export const storage = {
+    getItem: (key: string): string | null => {
+        try {
+            return localStorage.getItem(key);
+        } catch {
+            return (window as any)._memStorage?.[key] || null;
+        }
+    },
+    setItem: (key: string, value: string) => {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            if (!(window as any)._memStorage) (window as any)._memStorage = {};
+            (window as any)._memStorage[key] = value;
+        }
+    },
+    removeItem: (key: string) => {
+        try {
+            localStorage.removeItem(key);
+        } catch {
+            if ((window as any)._memStorage) delete (window as any)._memStorage[key];
+        }
+    }
+};
+
 export const SPOTIFY_CONFIG = {
     clientId: (import.meta.env.VITE_SPOTIFY_CLIENT_ID as string) || '',
     redirectUri: window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/callback',
@@ -55,7 +81,8 @@ async function generateCodeChallenge(codeVerifier: string) {
 export const getAuthUrl = async () => {
     const verifier = generateRandomString(128);
     const challenge = await generateCodeChallenge(verifier);
-    localStorage.setItem('spotify_code_verifier', verifier);
+    // FALLBACK: Store it, but the primary method will be the 'state' param
+    storage.setItem('spotify_code_verifier', verifier);
     const params = new URLSearchParams({
         client_id: SPOTIFY_CONFIG.clientId,
         response_type: 'code',
@@ -63,14 +90,20 @@ export const getAuthUrl = async () => {
         scope: SPOTIFY_CONFIG.scopes.join(' '),
         code_challenge_method: 'S256',
         code_challenge: challenge,
+        state: verifier, // CRITICAL FOR MOBILE: Pass verifier back via state
         show_dialog: 'true'
     });
     return `https://accounts.spotify.com/authorize?${params.toString()}`;
 };
 
-export const getToken = async (code: string) => {
-    const codeVerifier = localStorage.getItem('spotify_code_verifier');
-    if (!codeVerifier) throw new Error('Missing code verifier');
+export const getToken = async (code: string, stateVerifier?: string | null) => {
+    // Priority: 1. State parameter (Mobile/Iframe reliable) 2. Storage fallback (Desktop)
+    const codeVerifier = stateVerifier || storage.getItem('spotify_code_verifier');
+
+    if (!codeVerifier) {
+        throw new Error('Security: Code verifier missing. Please try connecting again.');
+    }
+
     const params = new URLSearchParams({
         client_id: SPOTIFY_CONFIG.clientId,
         grant_type: 'authorization_code',
@@ -78,7 +111,7 @@ export const getToken = async (code: string) => {
         redirect_uri: SPOTIFY_CONFIG.redirectUri,
         code_verifier: codeVerifier,
     });
-    const response = await fetch('https://accounts.spotify.com/api/token', {
+    const response = await fetchWithRetry('https://accounts.spotify.com/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
@@ -171,7 +204,7 @@ const fetchWithRetry = async (url: string, options: any, retries = 3): Promise<R
 
 export const checkTokenValidity = async (accessToken: string): Promise<boolean> => {
     try {
-        const response = await fetch('https://api.spotify.com/v1/me', {
+        const response = await fetchWithRetry('https://api.spotify.com/v1/me', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
         return response.ok;
@@ -191,8 +224,13 @@ export const performFullScan = async (
         const headers = { Authorization: `Bearer ${accessToken}` };
 
         // 0. Get user profile to identify owned playlists
-        const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
+        const userRes = await fetchWithRetry('https://api.spotify.com/v1/me', { headers });
         const userData = await userRes.json();
+
+        if (!userData || !userData.id) {
+            throw new Error('Failed to retrieve user profile Data. Please re-connect.');
+        }
+
         const userId = userData.id;
 
         // NOTE: We do NOT scan History/Top Picks because they are READ-ONLY in Spotify's API
@@ -329,13 +367,13 @@ export const performQuarantine = async (
 
     // 1. Get user profile
     onProgress?.('Getting user profile...', 5);
-    const userRes = await fetch('https://api.spotify.com/v1/me', { headers });
+    const userRes = await fetchWithRetry('https://api.spotify.com/v1/me', { headers });
     const userData = await userRes.json();
     const userId = userData.id;
 
     // 2. Create Quarantine Playlist
     onProgress?.('Creating quarantine playlist...', 10);
-    const plRes = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+    const plRes = await fetchWithRetry(`https://api.spotify.com/v1/users/${userId}/playlists`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -345,6 +383,7 @@ export const performQuarantine = async (
         })
     });
     const playlist = await plRes.json();
+    if (!playlist || !playlist.id) throw new Error('Failed to create quarantine playlist');
     const quarantineId = playlist.id;
 
     // 3. Add ALL polluted items to Quarantine (in batches of 100)
@@ -355,7 +394,7 @@ export const performQuarantine = async (
         const batch = trackUris.slice(i, i + 100);
         const batchNum = Math.floor(i / 100) + 1;
         onProgress?.(`Adding batch ${batchNum}/${totalQuarantineBatches} to quarantine...`, 20 + Math.floor((batchNum / totalQuarantineBatches) * 20));
-        await fetch(`https://api.spotify.com/v1/playlists/${quarantineId}/tracks`, {
+        await fetchWithRetry(`https://api.spotify.com/v1/playlists/${quarantineId}/tracks`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ uris: batch })
@@ -378,7 +417,7 @@ export const performQuarantine = async (
                 const batch = likedIds.slice(i, i + 50);
                 const batchNum = Math.floor(i / 50) + 1;
                 onProgress?.(`Removing favorites batch ${batchNum}/${totalFavBatches}...`, 45 + Math.floor((batchNum / totalFavBatches) * 25));
-                await fetch(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
+                await fetchWithRetry(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
                     method: 'DELETE',
                     headers
                 });
@@ -418,7 +457,7 @@ export const performQuarantine = async (
             // Remove tracks in batches of 100 (Spotify API limit)
             for (let j = 0; j < trackUris.length; j += 100) {
                 const batch = trackUris.slice(j, j + 100);
-                const promise = fetch(`https://api.spotify.com/v1/playlists/${plId}/tracks`, {
+                const promise = fetchWithRetry(`https://api.spotify.com/v1/playlists/${plId}/tracks`, {
                     method: 'DELETE',
                     headers,
                     body: JSON.stringify({

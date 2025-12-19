@@ -1,0 +1,103 @@
+{
+    "toddler": {
+        "channelIds": [
+            "UCbCmjCuTUZos6Inko4u57UQ",
+            "UC_S79996Xzh75CA898950A",
+            "UC5S76f7fK9UrB95pD2p6p3A",
+            "UCJplp5SjeGSdVdwsfb9QCcA",
+            "UCcdwLphuJOu99EqwwLByfEA",
+            "UC2Y772H8H-D5C01A4Yv_UHA",
+            "UCE_b9FqG36D5_D_J5D_h-w",
+            "UCwI-N6Anm2u1E_o_qVvU_Yg",
+            "UCa_mpzJ8F_s-Lz_F-b_W_w",
+            "UC-cI_lM-iP7J6t_2hG_jNGA"
+        ],
+        "keywords": [
+            "nursery rhymes",
+            "lullaby",
+            "baby shark",
+            "toddler",
+            "preschool",
+            "wheels on the bus",
+            "abc song",
+            "colors for kids",
+            "learning colors",
+            "surprise eggs",
+            "play doh",
+            "finger family"
+        ],
+        "categories": [
+            "Education",
+            "Film & Animation"
+        ]
+    },
+    "kid": {
+        "channelIds": [
+            "UCxK9g6D-Y7_j7b_j7y4_F_w",
+            "UCGA2bW2Z_X-Q_S_S_S_X_X",
+            "UC5XwF6hK2D9hB1tYt8l-Ew",
+            "UCuYxc_h75O5C6v9M0E9G9gA",
+            "UC_a8X_D_B_X_C_X_X_X_X_X",
+            "UCvsh4S87_W6o92209S90Rmg"
+        ],
+        "keywords": [
+            "minecraft kids",
+            "roblox kids",
+            "unboxing toys",
+            "toy review",
+            "kid play",
+            "pretend play",
+            "slime",
+            "fidget",
+            "challenge kids",
+            "ryan's world",
+            "peppa pig",
+            "paw patrol",
+            "bluey"
+        ],
+        "categories": [
+            "Entertainment",
+            "Gaming"
+        ]
+    },
+    "preteen": {
+        "channelIds": [
+            "UCX6OQ3DkcsbYNE6H8uQCoVA",
+            "UCYVjWk00JmH6V_E5G8hT-Lg",
+            "UChGJGhZ9SOOHvBB0Y4DOO_w"
+        ],
+        "keywords": [
+            "roblox",
+            "minecraft",
+            "mrbeast",
+            "dream",
+            "stray kids",
+            "k-pop",
+            "gaming challenge",
+            "speed up",
+            "nightcore",
+            "tiktok compilation",
+            "skibidi toilet"
+        ],
+        "categories": [
+            "Gaming",
+            "Entertainment"
+        ]
+    },
+    "teen": {
+        "channelIds": [],
+        "keywords": [
+            "viral",
+            "trending",
+            "tiktok",
+            "shorts compilation",
+            "vlog",
+            "prank",
+            "glow up"
+        ],
+        "categories": [
+            "Entertainment",
+            "Howto & Style"
+        ]
+    }
+}
