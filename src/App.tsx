@@ -9,7 +9,7 @@ type Step = 'intro' | 'setup' | 'connect' | 'scan' | 'result' | 'payment' | 'rev
 const App: React.FC = () => {
   const [step, setStep] = useState<Step>('intro');
   const [minAge, setMinAge] = useState<number>(0);
-  const [maxAge, setMaxAge] = useState<number>(10);
+  const [maxAge, setMaxAge] = useState<number>(20);
   const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
   const [scannedCount, setScannedCount] = useState<number>(0);
   const [quarantinePlaylistId, setQuarantinePlaylistId] = useState<string | null>(null);
@@ -28,7 +28,6 @@ const App: React.FC = () => {
     favorites: true,
     history: true
   });
-  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -50,7 +49,23 @@ const App: React.FC = () => {
       }
     };
     handleAuthCallback();
-  }, []);
+
+    // Periodic check for token validity if we have one
+    const checkAuth = async () => {
+      if (accessToken) {
+        const { checkTokenValidity } = await import('./lib/spotify');
+        const isValid = await checkTokenValidity(accessToken);
+        if (!isValid) {
+          setAccessToken(null);
+          localStorage.removeItem('spotify_access_token');
+        }
+      }
+    };
+
+    if (accessToken) {
+      checkAuth();
+    }
+  }, [accessToken]);
 
   const totalPollutedItems = pollutedTracks.length + pollutedVideos.length;
 
@@ -77,9 +92,16 @@ const App: React.FC = () => {
           setSelectedTrackIds(new Set(polluted.map(t => t.id)));
           setPollutedVideos([]);
           setStep('result');
-        } catch (err) {
-          localStorage.removeItem('spotify_access_token');
-          setStep('connect');
+        } catch (err: any) {
+          if (err.message === 'AUTHENTICATION_EXPIRED' || err.status === 401) {
+            setAccessToken(null);
+            localStorage.removeItem('spotify_access_token');
+            setStep('connect');
+          } else {
+            console.error('Scan failed:', err);
+            alert('Scan failed. Please check your connection and try again.');
+            setStep('setup');
+          }
         }
       }
     };
@@ -114,27 +136,10 @@ const App: React.FC = () => {
     window.location.href = authUrl;
   };
 
-  const handleDownloadLikes = async () => {
-    if (!accessToken) return;
-    setIsDownloading(true);
-    try {
-      const { fetchAllLikedSongs } = await import('./lib/spotify');
-      const likes = await fetchAllLikedSongs(accessToken);
-      const blob = new Blob([JSON.stringify(likes, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `spotify_likes_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Download failed:', err);
-      alert('Failed to download likes.');
-    } finally {
-      setIsDownloading(false);
-    }
+  const handleLogout = () => {
+    setAccessToken(null);
+    localStorage.removeItem('spotify_access_token');
+    setStep('connect');
   };
 
   // Grouped tracks for review screen
@@ -175,12 +180,27 @@ const App: React.FC = () => {
     setExpandedArtists(next);
   };
 
+  const tracksBySource = useMemo(() => {
+    const groups: Record<string, PollutedItem[]> = {};
+    pollutedTracks.forEach(track => {
+      const sources = track.source.split(', ');
+      sources.forEach(source => {
+        if (!groups[source]) groups[source] = [];
+        groups[source].push(track);
+      });
+    });
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [pollutedTracks]);
+
   return (
     <div className="container animate-fade-in">
       <header style={{ textAlign: 'center', marginBottom: '2.5rem', marginTop: '1.5rem' }}>
-        <img src="logo.png" alt="unKidMyFeed Logo" style={{ width: '120px', height: '120px', marginBottom: '1rem', filter: 'drop-shadow(0 0 20px rgba(29, 185, 84, 0.3))' }} />
-        <h1 style={{ fontSize: '2.8rem', background: 'linear-gradient(to right, #1DB954, #FFFFFF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.05em', fontWeight: '800' }}>unKidMyFeed</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem', fontWeight: '500' }}>Bring your true taste back.</p>
+        <div style={{ position: 'relative', width: '120px', height: '120px', margin: '0 auto 1rem' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(29, 185, 84, 0.4) 0%, transparent 70%)', filter: 'blur(15px)', zEntries: -1 }}></div>
+          <img src="logo.png" alt="unKidMyFeed Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))' }} />
+        </div>
+        <h1 style={{ fontSize: '3rem', background: 'linear-gradient(to bottom, #FFFFFF 0%, #1DB954 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.06em', fontWeight: '900', textShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>unKidMyFeed</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem', fontWeight: '500', opacity: 0.8, marginTop: '-0.5rem' }}>Bring your true taste back.</p>
       </header>
 
       <main className="glass" style={{ padding: '2.5rem', maxWidth: '800px', margin: '0 auto', position: 'relative' }}>
@@ -205,9 +225,60 @@ const App: React.FC = () => {
                   <label style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>Target Ages:</label>
                   <span style={{ color: '#1DB954', fontWeight: 'bold' }}>{minAge} — {maxAge}</span>
                 </div>
-                {/* Sliders simplified for space */}
-                <input type="range" min="0" max="18" value={minAge} onChange={(e) => setMinAge(Math.min(maxAge - 1, parseInt(e.target.value)))} style={{ width: '100%' }} />
-                <input type="range" min="0" max="18" value={maxAge} onChange={(e) => setMaxAge(Math.max(minAge + 1, parseInt(e.target.value)))} style={{ width: '100%' }} />
+
+                <div style={{ position: 'relative', height: '40px', display: 'flex', alignItems: 'center', margin: '1rem 0' }}>
+                  {/* Track background */}
+                  <div style={{ position: 'absolute', width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }} />
+
+                  {/* Active range track */}
+                  <div style={{
+                    position: 'absolute',
+                    left: `${(minAge / 20) * 100}%`,
+                    width: `${((maxAge - minAge) / 20) * 100}%`,
+                    height: '6px',
+                    background: '#1DB954',
+                    borderRadius: '3px'
+                  }} />
+
+                  {/* Invisible sliders for interaction */}
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={minAge}
+                    onChange={(e) => setMinAge(Math.min(maxAge - 1, parseInt(e.target.value)))}
+                    style={{
+                      position: 'absolute',
+                      width: '100%',
+                      pointerEvents: 'none',
+                      WebkitAppearance: 'none',
+                      background: 'none'
+                    }}
+                    className="dual-range-input min"
+                  />
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={maxAge}
+                    onChange={(e) => setMaxAge(Math.max(minAge + 1, parseInt(e.target.value)))}
+                    style={{
+                      position: 'absolute',
+                      width: '100%',
+                      pointerEvents: 'none',
+                      WebkitAppearance: 'none',
+                      background: 'none'
+                    }}
+                    className="dual-range-input max"
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.3)', fontSize: '0.7rem' }}>
+                  <span>0y</span>
+                  <span>5y</span>
+                  <span>10y</span>
+                  <span>15y</span>
+                  <span>20y</span>
+                </div>
               </div>
 
               <div style={{ marginBottom: '2rem' }}>
@@ -217,7 +288,7 @@ const App: React.FC = () => {
                     { key: 'favorites', label: 'Un-like Songs (Favorites)', icon: <Music size={18} /> },
                     { key: 'createdPlaylists', label: 'My Created Playlists', icon: <User size={18} /> },
                     { key: 'collaborativePlaylists', label: 'My Collaborative Playlists', icon: <Users size={18} /> },
-                    { key: 'history', label: 'Clear History (Taste Profile Cache)', icon: <Zap size={18} /> }
+                    { key: 'history', label: 'Isolate History & Top Picks', icon: <Zap size={18} /> }
                   ].map(s => (
                     <div key={s.key} onClick={() => setRemovalSettings({ ...removalSettings, [s.key]: !(removalSettings as any)[s.key] })} style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', padding: '0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
                       {(removalSettings as any)[s.key] ? <CheckSquare size={20} color="#1DB954" /> : <Square size={20} color="gray" />}
@@ -225,6 +296,11 @@ const App: React.FC = () => {
                     </div>
                   ))}
                 </div>
+                {removalSettings.history && (
+                  <p style={{ marginTop: '0.8rem', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                    Note: "Top Picks" and "History" are read-only signals in Spotify. We will move these items to your Quarantine playlist, but they won't disappear from Spotify's internal lists until your listening habits change.
+                  </p>
+                )}
               </div>
               <button onClick={() => setStep('connect')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: 'white', color: 'black', fontWeight: 'bold' }}>Continue to Connect</button>
             </motion.div>
@@ -237,9 +313,16 @@ const App: React.FC = () => {
                 <div className="glass" style={{ padding: '2rem' }}>
                   <Music size={40} color="#1DB954" style={{ margin: '0 auto 1rem' }} />
                   <h3>Spotify</h3>
-                  <button onClick={handleSpotifyLogin} style={{ marginTop: '1rem', width: '100%', background: '#1DB954', color: 'white', padding: '0.8rem', borderRadius: '100px' }}>
-                    {accessToken ? 'Connected' : 'Connect'}
-                  </button>
+                  {accessToken ? (
+                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ background: 'rgba(29, 185, 84, 0.1)', color: '#1DB954', padding: '0.8rem', borderRadius: '100px', fontSize: '0.9rem', fontWeight: 'bold' }}>✓ Connected</div>
+                      <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: 'none', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button>
+                    </div>
+                  ) : (
+                    <button onClick={handleSpotifyLogin} style={{ marginTop: '1rem', width: '100%', background: '#1DB954', color: 'white', padding: '0.8rem', borderRadius: '100px', fontWeight: 'bold' }}>
+                      Connect
+                    </button>
+                  )}
                 </div>
                 <div className="glass" style={{ padding: '2rem', opacity: 0.5 }}>
                   <Youtube size={40} color="#666" style={{ margin: '0 auto 1rem' }} />
@@ -247,18 +330,6 @@ const App: React.FC = () => {
                   <button disabled style={{ marginTop: '1rem', width: '100', background: '#333', color: '#666', padding: '0.8rem', borderRadius: '100px' }}>Coming Soon</button>
                 </div>
               </div>
-
-              {accessToken && (
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <button
-                    onClick={handleDownloadLikes}
-                    disabled={isDownloading}
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'gray', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
-                  >
-                    {isDownloading ? 'Downloading...' : 'Debug: Download All Likes (JSON)'}
-                  </button>
-                </div>
-              )}
 
               <button disabled={!accessToken} onClick={() => setStep('scan')} style={{ width: '100%', padding: '1.2rem', borderRadius: '12px', background: accessToken ? 'white' : '#333', color: accessToken ? 'black' : 'gray' }}>Run Scan</button>
             </motion.div>
@@ -283,17 +354,40 @@ const App: React.FC = () => {
                 <h3 style={{ color: '#FF0000', fontSize: '1.5rem' }}>{totalPollutedItems} Polluted Items Found</h3>
                 <p style={{ color: 'var(--text-secondary)' }}>Analyzed {scannedCount} items from your profile</p>
               </div>
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {pollutedTracks.slice(0, 50).map((t, i) => (
-                  <div key={i} className="polluted-item">
-                    <img src={t.album.images[0]?.url} alt="" style={{ width: 40, height: 40, borderRadius: 4 }} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{t.name}</p>
-                      <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{t.reason}</p>
-                    </div>
+
+              <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                {tracksBySource.map(([source, tracks]) => (
+                  <div key={source} style={{ marginBottom: '2rem' }}>
+                    <h4 style={{
+                      fontSize: '0.9rem',
+                      color: '#1DB954',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      marginBottom: '1rem',
+                      borderBottom: '1px solid rgba(255,255,255,0.1)',
+                      paddingBottom: '0.5rem',
+                      display: 'flex',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>{source}</span>
+                      <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>{tracks.length} items</span>
+                    </h4>
+                    {tracks.slice(0, 30).map((t, i) => (
+                      <div key={i} className="polluted-item" style={{ background: 'none', border: 'none', padding: '0.4rem 0' }}>
+                        <img src={t.album.images[0]?.url} alt="" style={{ width: 32, height: 32, borderRadius: 4 }} />
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{t.name}</p>
+                          <p style={{ fontSize: '0.7rem', color: '#FF0000' }}>{t.reason}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {tracks.length > 30 && (
+                      <p style={{ fontSize: '0.7rem', color: 'gray', textAlign: 'center', marginTop: '0.5rem' }}>+ {tracks.length - 30} more in this section</p>
+                    )}
                   </div>
                 ))}
               </div>
+
               <button onClick={() => setStep('payment')} style={{ width: '100%', padding: '1.2rem', marginTop: '2rem', borderRadius: '12px', background: 'linear-gradient(45deg, #1DB954, #FF0000)', color: 'white', fontWeight: 'bold' }}>
                 Purge for $5
               </button>
@@ -392,6 +486,27 @@ const App: React.FC = () => {
         .polluted-item { display: flex; align-items: center; gap: 1rem; padding: 0.8rem; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(255,255,255,0.05); }
         .animate-spin { animation: spin 2s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .dual-range-input {
+          cursor: pointer;
+        }
+        .dual-range-input::-webkit-slider-thumb {
+          pointer-events: auto;
+          -webkit-appearance: none;
+          height: 18px;
+          width: 18px;
+          border-radius: 50%;
+          background: white;
+          border: 2px solid #1DB954;
+          box-shadow: 0 0 10px rgba(0,0,0,0.5);
+          margin-top: -6px; /* Specific adjustment for dual display */
+        }
+        .dual-range-input.min::-webkit-slider-thumb {
+          z-index: 2;
+        }
+        .dual-range-input.max::-webkit-slider-thumb {
+          z-index: 1;
+        }
       `}</style>
     </div>
   );

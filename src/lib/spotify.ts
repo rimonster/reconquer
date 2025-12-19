@@ -24,6 +24,7 @@ export const SPOTIFY_CONFIG = {
         'user-read-recently-played',
         'user-top-read',
         'user-library-read',
+        'user-library-modify',
         'playlist-read-private',
         'playlist-read-collaborative',
         'playlist-modify-public',
@@ -167,24 +168,16 @@ const fetchWithRetry = async (url: string, options: any, retries = 3): Promise<R
     throw new Error('Max retries reached');
 };
 
-export const fetchAllLikedSongs = async (accessToken: string): Promise<any[]> => {
-    const headers = { Authorization: `Bearer ${accessToken}` };
-    const favoritesRaw: any[] = [];
-    let likedUrl: string | null = 'https://api.spotify.com/v1/me/tracks?limit=50';
 
-    while (likedUrl) {
-        const likedRes = await fetchWithRetry(likedUrl, { headers });
-        const likedData = await likedRes.json();
-        favoritesRaw.push(...(likedData.items || []).map((item: any) => ({
-            id: item.track.id,
-            name: item.track.name,
-            artist: item.track.artists.map((a: any) => a.name).join(', '),
-            album: item.track.album.name,
-            added_at: item.added_at
-        })));
-        likedUrl = likedData.next;
+export const checkTokenValidity = async (accessToken: string): Promise<boolean> => {
+    try {
+        const response = await fetch('https://api.spotify.com/v1/me', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        return response.ok;
+    } catch {
+        return false;
     }
-    return favoritesRaw;
 };
 
 export const performFullScan = async (
@@ -389,22 +382,27 @@ export const performQuarantine = async (
         });
     }
 
-    // 4. Remove from Favorites
+    // 4. Remove from Favorites (STRICT: Only remove if found in Favorites)
     if (removalSettings.favorites) {
         onProgress?.('Removing from favorites...', 45);
+
+        // We only remove from Favorites if the item was actually found there during scan.
+        // Note: 'Top Picks' and 'History' are read-only in Spotify's API and cannot be "deleted".
         const likedIds = pollutedItems
             .filter(item => item.source.includes('Favorites'))
             .map(item => item.id);
 
-        const totalFavBatches = Math.ceil(likedIds.length / 50);
-        for (let i = 0; i < likedIds.length; i += 50) {
-            const batch = likedIds.slice(i, i + 50);
-            const batchNum = Math.floor(i / 50) + 1;
-            onProgress?.(`Removing favorites batch ${batchNum}/${totalFavBatches}...`, 45 + Math.floor((batchNum / totalFavBatches) * 25));
-            await fetch(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
-                method: 'DELETE',
-                headers
-            });
+        if (likedIds.length > 0) {
+            const totalFavBatches = Math.ceil(likedIds.length / 50);
+            for (let i = 0; i < likedIds.length; i += 50) {
+                const batch = likedIds.slice(i, i + 50);
+                const batchNum = Math.floor(i / 50) + 1;
+                onProgress?.(`Removing favorites batch ${batchNum}/${totalFavBatches}...`, 45 + Math.floor((batchNum / totalFavBatches) * 25));
+                await fetch(`https://api.spotify.com/v1/me/tracks?ids=${batch.join(',')}`, {
+                    method: 'DELETE',
+                    headers
+                });
+            }
         }
     }
 
